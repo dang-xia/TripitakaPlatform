@@ -158,7 +158,8 @@ class CorrectSeg(models.Model):
     doubt_comment = models.TextField('存疑意见', default='', blank=True)
 
 class ReelCorrectText(models.Model):
-    BODY_START_PATTERN = re.compile('品第[一二三四五六七八九十]+(之[一二三四五六七八九十]+)*')
+    BODY_START_PATTERN = re.compile('品第[一二三四五六七八九十]*(之[一二三四五六七八九十]*)*$')
+    BODY_END_PATTERN = re.compile('卷第[一二三四五六七八九十]*')
 
     reel = models.ForeignKey(Reel, verbose_name='实体藏经卷', on_delete=models.CASCADE)
     text = SutraTextField('经文', blank=True) # 文字校对或文字校对审定后得到的经文
@@ -178,20 +179,27 @@ class ReelCorrectText(models.Model):
 
     def set_text(self, text):
         self.text = text
-        text_len = len(text)
-        match = ReelCorrectText.BODY_START_PATTERN.search(text)
-        if match:
-            body_start = match.end()
-        else:
-            body_start = 0
-        body_end = text.rfind('大方廣佛華嚴經卷第', text_len - 30)
-        if body_end == -1:
-            body_end = text.rfind('大方廣佛華嚴经卷第', text_len - 30)
-            if body_end == -1:
-                body_end = text_len
-        self.head = text[:body_start]
-        self.body = text[body_start:body_end]
-        self.tail = text[body_end:]
+        lines = text.split('\n')
+        line_cnt = len(lines)
+        start_line_index = min(10, line_cnt-1)
+        for i in range(start_line_index):
+            if ReelCorrectText.BODY_START_PATTERN.search(lines[i]):
+                start_line_index = i
+                break
+        author_line_index = -1
+        for i in range(start_line_index-1, -1, -1):
+            if lines[i].endswith('譯'):
+                author_line_index = i
+                break
+        tail_line_index = line_cnt
+        line_index = max(line_cnt-5, 0)
+        for i in range(line_cnt-1, line_index, -1):
+            if ReelCorrectText.BODY_END_PATTERN.search(lines[i]):
+                tail_line_index = i
+                break
+        self.head = '\n'.join(lines[0 : author_line_index+1])
+        self.body = '\n'.join(lines[author_line_index+1 : tail_line_index])
+        self.tail = '\n'.join(lines[tail_line_index:])
 
 class LQReelText(models.Model):
     lqreel = models.ForeignKey(LQReel, verbose_name='龙泉藏经卷', on_delete=models.CASCADE)

@@ -46,22 +46,24 @@ def create_correct_tasks(batchtask, reel, base_reel_lst, correct_times, correct_
             print('no base text.')
             return None
         base_reel_correct_text = reel_correct_texts[0]
-        base_text = base_reel_correct_text.body
+        base_text_lst = [base_reel_correct_text.head]
         # 对于比对本，将前后两卷经文都加上
-        base_reel_next = list(Reel.objects.filter(sutra=base_reel.sutra, reel_no=base_reel.reel_no+1))
-        if len(base_reel_next) > 0:
-            base_reel_next = base_reel_next[0]
-            reel_correct_texts = list(ReelCorrectText.objects.filter(reel=base_reel_next).order_by('-id')[0:1])
-            if reel_correct_texts:
-                base_text += reel_correct_texts[0].body
         if base_reel.reel_no > 1:
             base_reel_prev = list(Reel.objects.filter(sutra=base_reel.sutra, reel_no=base_reel.reel_no-1))
             if len(base_reel_prev) > 0:
                 base_reel_prev = base_reel_prev[0]
                 reel_correct_texts = list(ReelCorrectText.objects.filter(reel=base_reel_prev).order_by('-id')[0:1])
                 if reel_correct_texts:
-                    base_text = reel_correct_texts[0].body + base_text
-        base_text = base_reel_correct_text.head + base_text
+                    base_text_lst.append(reel_correct_texts[0].body)
+        base_text_lst.append(base_reel_correct_text.body)
+        base_reel_next = list(Reel.objects.filter(sutra=base_reel.sutra, reel_no=base_reel.reel_no+1))
+        if len(base_reel_next) > 0:
+            base_reel_next = base_reel_next[0]
+            reel_correct_texts = list(ReelCorrectText.objects.filter(reel=base_reel_next).order_by('-id')[0:1])
+            if reel_correct_texts:
+                base_text_lst.append(reel_correct_texts[0].body)
+        base_text_lst.append(base_reel_correct_text.tail)
+        base_text = ''.join(base_text_lst)
         correctsegs = OCRCompare.generate_compare_reel(base_text, reel_ocr_text.text)
 
     task_id_lst = []
