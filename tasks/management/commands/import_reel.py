@@ -56,6 +56,6 @@ class Command(BaseCommand):
                     reel = Reel.objects.get(sutra=sutra, reel_no=reel_no)
                 except:
                     reel = Reel(sutra=sutra, reel_no=reel_no, start_vol=start_vol, start_vol_page=start_vol_page,
-                    end_vol=end_vol, end_vol_page=end_vol_page)
+                    end_vol=end_vol, end_vol_page=end_vol_page, ocr_ready=True)
                     reel_lst.append(reel)
             Reel.objects.bulk_create(reel_lst)

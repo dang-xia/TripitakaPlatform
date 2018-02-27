@@ -221,6 +221,26 @@ def create_reeldiff_for_judge_task(lqreel, lqsutra):
     reel_lst[0] = reel
     reel_id_lst = [reel.id for reel in reel_lst]
     new_sutra_lst = [reel.sutra for reel in reel_lst]
+    reel_correct_ready = [r.correct_ready for r in reel_lst]
+
+    # 检查除底本外的其他版本的前一卷是否都已做完文字校对
+    prev_reel_correct_ready = []
+    if reel_no > 1:
+        prev_reel_lst = [ Reel.objects.get(sutra=sutra, reel_no=reel_no-1) for sutra in new_sutra_lst[1:]]
+        prev_reel_correct_ready = [r.correct_ready or (not r.ocr_ready) for r in prev_reel_lst]
+
+    # 检查除底本外的其他版本的后一卷是否都已做完文字校对
+    next_reel_correct_ready = []
+    for sutra in new_sutra_lst[1:]:
+        if reel_no < sutra.total_reels:
+            r = Reel.objects.get(sutra=sutra, reel_no=reel_no+1)
+            if r.ocr_ready:
+                next_reel_correct_ready.append(r.correct_ready)
+    if all(reel_correct_ready) and all(prev_reel_correct_ready) and all(next_reel_correct_ready):
+        pass
+    else:
+        logging.info('此卷的文字校对还未完成，暂时不触发校勘判取任务')
+        return None
 
     reel_id_to_text = {}
     reel_id_to_reel_correct_text = {}
@@ -242,9 +262,9 @@ def create_reeldiff_for_judge_task(lqreel, lqsutra):
         reel_correct_text_lst.append( reel_id_to_reel_correct_text[reel.id] )
     reeldiff = ReelDiff(lqsutra=lqsutra, reel_no=reel_no, base_text=reel_correct_text_lst[0])
     reeldiff.save()
-    reeldiff.correct_texts.set(reel_correct_text_lst)
+    #reeldiff.correct_texts.set(reel_correct_text_lst)
 
-    generate_reeldiff(reeldiff, new_sutra_lst, reel_lst, correct_text_lst)
+    generate_reeldiff(reeldiff, new_sutra_lst, reel_lst)
     for task in judge_task_lst:
         for diffseg in reeldiff.diffseg_set.all():
             diffsegresult = DiffSegResult(task=task, diffseg=diffseg, selected_text='')
@@ -259,7 +279,7 @@ def create_reeldiff_for_judge_task(lqreel, lqsutra):
 
 def publish_correct_result(task):
     '''
-    发布文字校对的结果，供校勘判取使用
+    发布文字校对的结果
     '''
     print('publish_correct_result')
     sutra = task.reel.sutra
@@ -274,6 +294,8 @@ def publish_correct_result(task):
                 reel_correct_text = ReelCorrectText(reel=task.reel, task=task, publisher=task.picker)
                 reel_correct_text.set_text(task.result)
                 reel_correct_text.save()
+                task.reel.correct_ready = True
+                task.reel.save(update_fields=['correct_ready'])
     else: # 与最新的一份记录比较
         text1 = saved_reel_correct_texts[0].text
         text2 = task.result
@@ -284,6 +306,8 @@ def publish_correct_result(task):
                     reel_correct_text = ReelCorrectText(reel=task.reel, task=task, publisher=task.picker)
                     reel_correct_text.set_text(task.result)
                     reel_correct_text.save()
+                    task.reel.correct_ready = True
+                    task.reel.save(update_fields=['correct_ready'])
                     text_changed = True
         else:
             return
@@ -321,7 +345,10 @@ def publish_correct_result(task):
         logging.error('没找到龙泉藏经卷对应的记录')
         return None
 
-    create_reeldiff_for_judge_task(lqreel, lqsutra)
+    try:
+        create_reeldiff_for_judge_task(lqreel, lqsutra)
+    except:
+        traceback.print_exc()
 
 CORRECT_RESULT_FILTER = re.compile('[ 　ac-oq-zA-Z0-9.?\-",/，。、：]')
 def generate_correct_result(task):

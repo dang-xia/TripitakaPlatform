@@ -252,7 +252,7 @@ def generate_text_diff(reeltext_lst, reeldiff):
     ReelDiff.objects.filter(id=reeldiff.id).update(diffseg_pos_lst=diffseg_pos_lst_json)
     return result_lst
 
-def generate_reeldiff(reeldiff, sutra_lst, reel_lst, correct_text_lst):
+def generate_reeldiff(reeldiff, sutra_lst, reel_lst):
     reel_no = reeldiff.reel_no
     multireeltexts = []
     sutra_count = len(sutra_lst)

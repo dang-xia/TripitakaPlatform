@@ -17,7 +17,7 @@ import re, json
 def save_reel_with_correct_text(lqsutra, sid, reel_no, start_vol, start_vol_page, end_vol_page,
     path1='', path2='', path3=''):
     reel, reel_ocr_text = save_reel(lqsutra, sid, reel_no, start_vol, start_vol_page, end_vol_page, \
-    path1, path2, path3)
+    path1, path2, path3, correct_ready=True)
     try:
         reel_correct_text = ReelCorrectText.get(reel=reel)
     except:

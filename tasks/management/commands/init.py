@@ -15,7 +15,7 @@ import traceback
 import re, json
 
 def save_reel(lqsutra, sid, reel_no, start_vol, start_vol_page, end_vol_page,
-    path1='', path2='', path3=''):
+    path1='', path2='', path3='', correct_ready=False):
     tcode = sid[:2]
     tripitaka = Tripitaka.objects.get(code=tcode)
     try:
@@ -30,7 +30,7 @@ def save_reel(lqsutra, sid, reel_no, start_vol, start_vol_page, end_vol_page,
     except:
         reel = Reel(sutra=sutra, reel_no=reel_no, start_vol=start_vol,
         start_vol_page=start_vol_page, end_vol=start_vol, end_vol_page=end_vol_page, edition_type=Reel.EDITION_TYPE_CHECKED,
-        path1=path1, path2=path2, path3=path3)
+        path1=path1, path2=path2, path3=path3, correct_ready=correct_ready)
         reel.save()
     try:
         reel_ocr_text = ReelOCRText.get(reel=reel)
@@ -131,6 +131,8 @@ class Command(BaseCommand):
         #         reel_correct_text = ReelCorrectText(reel=huayan_yb_1)
         #         reel_correct_text.set_text(text)
         #         reel_correct_text.save()
+        #         huayan_yb_1.correct_ready = True
+        #         huayan_yb_1.save(update_fields=['correct_ready'])
 
         # # 得到精确的切分数据
         # try:
