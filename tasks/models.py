@@ -157,6 +157,16 @@ class CorrectSeg(models.Model):
     #存疑相关
     doubt_comment = models.TextField('存疑意见', default='', blank=True)
 
+class DoubtSeg(models.Model):
+    task = models.ForeignKey(Task, related_name='doubt_segs', on_delete=models.CASCADE)
+    page_no = models.SmallIntegerField('Seg卷中页序号', default=-1)
+    line_no = models.SmallIntegerField('Seg页中行序号', default=-1)
+    char_no = models.SmallIntegerField('Seg行中字序号', default=-1)
+    doubt_text = models.TextField('存疑文字段', default='', blank=True)
+    doubt_char_no = models.SmallIntegerField('存疑行中字序号', default=-1)
+    doubt_comment = models.TextField('存疑意见', default='', blank=True)
+    created_at = models.DateTimeField('创建时间', default=timezone.now)
+
 class ReelCorrectText(models.Model):
     BODY_START_PATTERN = re.compile('品第[一二三四五六七八九十]*(之[一二三四五六七八九十]*)*$')
     BODY_END_PATTERN = re.compile('卷第[一二三四五六七八九十]*')

@@ -78,14 +78,14 @@
     background-color: #cfc;
 }
 .difftext {
-    background-color: #fdd;
+    color: #ff8282;
 }
 .difftextsel {
     color: red;
     background-color: #fdd;
 }
 .confirmed {
-    background-color: #cfc;
+    color: #88c177;
 }
 .seg-row-sel {
     font-size: 26px;
@@ -200,9 +200,7 @@ ul {list-style-type:none;}
     bottom: 0;
 }
 .changed {
-    background-color: #ed3f14;
-    position: relative;
-    padding: 0px 3px;
+    color: blueviolet;
 }
 .operation .selection:hover {
     cursor: pointer;
@@ -229,6 +227,7 @@ ul {list-style-type:none;}
 .spn {
     display: inline;
     padding: 0;
+    border-bottom: thin dashed #101010;
 }
 span [type='text'] {
     width: 100%;
@@ -238,24 +237,17 @@ span [type='text'] {
     border: 1px solid #ebeef5;
     font-size: 20px;
 }
-span.white {
+span.removed {
     font-size: 20px;
-    width: 2%;
-    display: inline-block;
-    position: relative;
+    width: 0px;
     line-height: 22px;
-    padding: 0px;
+    padding: 5px;
+    background-color: darkgrey
 }
-span.white:after {
-    content: "";
-    position: absolute;
-    display: block;
-    background: antiquewhite;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+span.newline {
+    font-size: 12px;
 }
+
 .elpopup {
     margin-top: 30px;
 }
@@ -276,11 +268,12 @@ opacity: 0;
     border: 1px solid #ebebeb;
     border-radius: 3px;
     background-color: whitesmoke;
-    position: fixed;
+    position: relative;
     top: 4px;
     margin-left: -15px;
     width: 110%;
     padding: 10px;
+    z-index: 2001;
 }
 
 .content-container {
