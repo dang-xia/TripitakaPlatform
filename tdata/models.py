@@ -128,6 +128,8 @@ class Reel(models.Model):
     image_ready = models.BooleanField(verbose_name='图片状态', default=False)
     cut_ready = models.BooleanField(verbose_name='切分数据状态', default=False)
     column_ready = models.BooleanField(verbose_name='切列图状态', default=False)
+    ocr_ready = models.BooleanField(verbose_name='原始切分数据状态', default=False)
+    correct_ready = models.BooleanField(verbose_name='是否有文字校对经文', default=False)
 
     class Meta:
         verbose_name = '实体卷'
