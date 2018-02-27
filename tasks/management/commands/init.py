@@ -121,22 +121,22 @@ class Command(BaseCommand):
                 correctseg.id = None
             CorrectSeg.objects.bulk_create(correctsegs)
 
-        # 用于测试计算精确切分数据
-        try:
-            reelcorrecttext = ReelCorrectText.objects.get(reel=huayan_yb_1)
-        except:
-            filename = os.path.join(BASE_DIR, 'data/sutra_text/%s_001_fixed.txt' % 'YB000860')
-            with open(filename, 'r', encoding='utf-8') as f:
-                text = f.read()
-                reel_correct_text = ReelCorrectText(reel=huayan_yb_1)
-                reel_correct_text.set_text(text)
-                reel_correct_text.save()
+        # # 用于测试计算精确切分数据
+        # try:
+        #     reelcorrecttext = ReelCorrectText.objects.get(reel=huayan_yb_1)
+        # except:
+        #     filename = os.path.join(BASE_DIR, 'data/sutra_text/%s_001_fixed.txt' % 'YB000860')
+        #     with open(filename, 'r', encoding='utf-8') as f:
+        #         text = f.read()
+        #         reel_correct_text = ReelCorrectText(reel=huayan_yb_1)
+        #         reel_correct_text.set_text(text)
+        #         reel_correct_text.save()
 
-        # 得到精确的切分数据
-        try:
-            compute_accurate_cut(huayan_yb_1)
-        except Exception:
-            traceback.print_exc()
+        # # 得到精确的切分数据
+        # try:
+        #     compute_accurate_cut(huayan_yb_1)
+        # except Exception:
+        #     traceback.print_exc()
 
 
 

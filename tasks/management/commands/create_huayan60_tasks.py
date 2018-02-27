@@ -29,7 +29,7 @@ class Command(BaseCommand):
             admin.is_admin = True
             admin.save()
         lqsutra = LQSutra.objects.get(sid='LQ003100') #大方廣佛華嚴經60卷
-        reel_lst = [(lqsutra, reel_no) for reel_no in range(1, 61) ]
+        reel_lst = [(lqsutra, reel_no) for reel_no in range(1, 3) ]
         batchtask = BatchTask(priority=2, publisher=admin)
         batchtask.save()
         create_tasks_for_batchtask(batchtask, reel_lst, 2, 1, 2, 1, 2, 1, 2, 1)

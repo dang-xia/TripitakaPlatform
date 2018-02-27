@@ -15,18 +15,20 @@ def set_char_position(diffsegtext, tid_to_reeltext):
         end_index = diffsegtext.position + len(diffsegtext.text) - 1
     else:
         end_index = diffsegtext.position
-    start_page_no, start_line_no, start_char_no, end_page_no, end_line_no, end_char_no = \
-    tid_to_reeltext[tid].get_char_position(
-        diffsegtext.position,
-        end_index)
-    reel = tid_to_reeltext[tid].reel
-    # 在校勘记中的字ID格式：
-    # 8位sid_3位卷号_2位卷中页号_1位栏位号_2位行号_2位行中字序号
-    # YB000860_001_01_0_01_01
-    diffsegtext.start_char_pos = '%s_%03d_%02d_%s_%02d_%02d' % (\
-        reel.sutra.sid, reel.reel_no, start_page_no, '0', start_line_no, start_char_no)
-    diffsegtext.end_char_pos = '%s_%03d_%02d_%s_%02d_%02d' % (\
-        reel.sutra.sid, reel.reel_no, end_page_no, '0', end_line_no, end_char_no)
+    # start_page_no, start_line_no, start_char_no, end_page_no, end_line_no, end_char_no = \
+    # tid_to_reeltext[tid].get_char_position(
+    #     diffsegtext.position,
+    #     end_index)
+    # reel = tid_to_reeltext[tid].reel
+    # # 在校勘记中的字ID格式：
+    # # 8位sid_3位卷号_2位卷中页号_1位栏位号_2位行号_2位行中字序号
+    # # YB000860_001_01_0_01_01
+    # diffsegtext.start_char_pos = '%s_%03d_%02d_%s_%02d_%02d' % (\
+    #     reel.sutra.sid, reel.reel_no, start_page_no, '0', start_line_no, start_char_no)
+    # diffsegtext.end_char_pos = '%s_%03d_%02d_%s_%02d_%02d' % (\
+    #     reel.sutra.sid, reel.reel_no, end_page_no, '0', end_line_no, end_char_no)
+    diffsegtext.start_char_pos = tid_to_reeltext[tid].get_char_position(diffsegtext.position)
+    diffsegtext.end_char_pos = tid_to_reeltext[tid].get_char_position(end_index)
 
 def generate_text_diff(reeltext_lst, reeldiff):
     n = len(reeltext_lst)
@@ -194,10 +196,11 @@ def generate_text_diff(reeltext_lst, reeldiff):
     new_diffsegtexts_lst = []
     diffseg_pos_lst = []
     diffseg_no = 1
+    offset = reeltext_lst[0].reeltext_lst[0].head_text_len
     for i in range(diffseg_count):
         diffseg = diffseg_lst[i]
         diffsegtexts = diffsegtexts_lst[i]
-        diffseg.base_pos = diffsegtexts[0].position
+        diffseg.base_pos = diffsegtexts[0].position + offset
         diffseg.base_length = len(diffsegtexts[0].text)
         if i > 0:
             prev_diffseg = new_diffseg_lst[-1]
@@ -231,7 +234,6 @@ def generate_text_diff(reeltext_lst, reeldiff):
             'base_length': diffseg.base_length
         })
 
-
     # 创建DiffSegText
     tid_to_reeltext = {}
     for reeltext in reeltext_lst:
@@ -252,18 +254,43 @@ def generate_text_diff(reeltext_lst, reeldiff):
 
 def generate_reeldiff(reeldiff, sutra_lst, reel_lst, correct_text_lst):
     reel_no = reeldiff.reel_no
-    reeltexts = []
+    multireeltexts = []
     sutra_count = len(sutra_lst)
     i = 0
     while i < sutra_count:
         reel = Reel.objects.get(sutra_id=sutra_lst[i].id, reel_no=reel_no)
-        reeltext = ReelText(
-            reel,
-            correct_text_lst[i],
-            sutra_lst[i].tripitaka_id,
-            sutra_lst[i].sid,
-            reel_lst[i].start_vol,
-            reel_lst[i].start_vol_page)
-        reeltexts.append(reeltext)
+        if i == 0:
+            reelcorrecttext = ReelCorrectText.objects.filter(reel_id=reel.id).order_by('-id')[0]
+            multireeltext = MultiReelText(sutra_lst[i].tripitaka_id)
+            multireeltext.add_reeltext(reel, reelcorrecttext.body, reelcorrecttext.head)
+        else:
+            reelcorrecttext = ReelCorrectText.objects.filter(reel_id=reel.id).order_by('-id')[0]
+            reelcorrecttext_p = None
+            if reel.reel_no > 1:
+                reel_p = Reel.objects.get(sutra_id=sutra_lst[i].id, reel_no=reel_no-1)
+                reelcorrecttext_p = ReelCorrectText.objects.filter(reel_id=reel_p.id).order_by('-id')[0]
+            reelcorrecttext_n = None
+            try:
+                if reel_no < sutra_lst[i].total_reels:
+                    reel_n = Reel.objects.get(sutra_id=sutra_lst[i].id, reel_no=reel_no+1)
+                    reelcorrecttext_n = ReelCorrectText.objects.filter(reel_id=reel_n.id).order_by('-id')[0]
+            except:
+                pass
+            multireeltext = MultiReelText(sutra_lst[i].tripitaka_id)
+            #multireeltext.add_reeltext(reel, reelcorrecttext.head, '')
+            if reelcorrecttext.prev_index is not None and reelcorrecttext_p:
+                prev_index = reelcorrecttext.prev_index
+                multireeltext.add_reeltext(reel_p, reelcorrecttext_p.body[prev_index:], \
+                reelcorrecttext_p.head + reelcorrecttext_p.body[:prev_index])
+            start_index = reelcorrecttext.start_index
+            end_index = reelcorrecttext.end_index
+            multireeltext.add_reeltext(reel, reelcorrecttext.body[start_index:end_index], \
+            reelcorrecttext.head + reelcorrecttext.body[:start_index])
+            if reelcorrecttext.next_index is not None and reelcorrecttext_n:
+                next_index = reelcorrecttext.next_index
+                multireeltext.add_reeltext(reel_n, reelcorrecttext_n.body[:next_index], \
+                reelcorrecttext_n.head)
+            #multireeltext.add_reeltext(reel, reelcorrecttext.tail, reelcorrecttext.head + reelcorrecttext.body)
+        multireeltexts.append(multireeltext)
         i += 1
-    generate_text_diff(reeltexts, reeldiff)
+    generate_text_diff(multireeltexts, reeldiff)

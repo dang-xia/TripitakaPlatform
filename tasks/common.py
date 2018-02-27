@@ -595,6 +595,79 @@ class ReelText(object):
             i += 1
         return (start_page_no, start_line_no, start_char_no, end_page_no, end_line_no, end_char_no)
 
+class ReelText2(object):
+    def __init__(self, reel, text_len, head_text, separators):
+        self.reel = reel
+        self.text_len = text_len
+        self.sid = self.reel.sutra.sid
+        self.separators = separators
+        self.head_text_len = len(SEPARATORS_PATTERN.sub('', head_text))
+        self.start_count_p = head_text.count('p')
+        self.start_count_n = head_text.count('\n')
+
+    def get_char_position(self, index):
+        count_p = self.start_count_p
+        count_n = self.start_count_n
+        page_no = -1
+        line_no = -1
+        char_no = -1
+        last_pos = 0
+        separator_count = len(self.separators)
+        i = 0
+        while i <= separator_count:
+            if i < separator_count:
+                pos, separator = self.separators[i]
+            else:
+                pos = self.text_len
+            if pos > index and char_no == -1:
+                # 第一次pos > index
+                page_no = count_p
+                line_no = count_n
+                char_no = index - last_pos + 1
+                break
+
+            if i == separator_count:
+                break
+            if separator == 'p':
+                count_p += 1
+                count_n = 0
+            elif separator == '\n':
+                count_n += 1
+            last_pos = pos
+            i += 1
+        # 在校勘记中的字ID格式：
+        # 8位sid_3位卷号_2位卷中页号_1位栏位号_2位行号_2位行中字序号
+        # YB000860_001_01_0_01_01
+        char_pos = '%s_%03d_%02d_%s_%02d_%02d' % (\
+            self.sid, self.reel.reel_no, page_no, '0', line_no, char_no)
+        return char_pos
+
+class MultiReelText(object):
+    def __init__(self, tripitaka_id):
+        self.reeltext_lst = []
+        self.text = ''
+        self.tripitaka_id = tripitaka_id
+        self.tripitaka = Tripitaka.objects.get(id=self.tripitaka_id)
+
+    def add_reeltext(self, reel, text, head_text):
+        clean_text = SEPARATORS_PATTERN.sub('', text)
+        separators = extract_page_line_separators(text)
+        reeltext = ReelText2(reel, len(clean_text), head_text, separators)
+        self.reeltext_lst.append(reeltext)
+        self.text += clean_text
+
+    def get_char_position(self, index):
+        relative_index = index
+        reeltext_cnt = len(self.reeltext_lst)
+        for i in range(reeltext_cnt):
+            reeltext = self.reeltext_lst[i]
+            if relative_index < reeltext.text_len:
+                return reeltext.get_char_position(relative_index)
+            else:
+                relative_index -= reeltext.text_len
+            if i == reeltext_cnt - 1:
+                return reeltext.get_char_position(reeltext.text_len)
+
 def get_reel_text(reel):
     pages = []
     for vol_page in range(reel.start_vol_page, reel.end_vol_page+1):

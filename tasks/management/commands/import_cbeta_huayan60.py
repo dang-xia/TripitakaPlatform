@@ -81,8 +81,9 @@ def read_text_info(lines):
             continue
         line_text = line_text.strip()
         line_text = CLEAN_PATTERN_PUNCT.sub('', line_text)
-        reeltext.append( line_text + '\n' )
-    return ''.join(reeltext)
+        if line_text:
+            reeltext.append( line_text )
+    return '\n'.join(reeltext)
 
 class Command(BaseCommand):
     def handle(self, *args, **options):

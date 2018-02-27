@@ -168,14 +168,19 @@ class DoubtSeg(models.Model):
     created_at = models.DateTimeField('创建时间', default=timezone.now)
 
 class ReelCorrectText(models.Model):
-    BODY_START_PATTERN = re.compile('品第[一二三四五六七八九十]*(之[一二三四五六七八九十]*)*$')
-    BODY_END_PATTERN = re.compile('卷第[一二三四五六七八九十]*')
+    BODY_START_PATTERN = re.compile('品(第[一二三四五六七八九十百]*(之[一二三四五六七八九十百]*)*)|(品之[一二三四五六七八九十百]*)$')
+    BODY_END_PATTERN = re.compile('卷第[一二三四五六七八九十百]*$')
+    SEPARATORS_PATTERN = re.compile('[pb\n]')
 
     reel = models.ForeignKey(Reel, verbose_name='实体藏经卷', on_delete=models.CASCADE)
     text = SutraTextField('经文', blank=True) # 文字校对或文字校对审定后得到的经文
     head = SutraTextField('经文正文前文本', blank=True, default='')
     body = SutraTextField('经文正文', blank=True, default='')
     tail = SutraTextField('经文正文后文本', blank=True, default='')
+    prev_index = models.IntegerField('用于校勘的卷文本的前一卷偏移量', null=True)
+    start_index = models.IntegerField('用于校勘的卷文本的起始偏移量', null=True, default=0)
+    end_index = models.IntegerField('用于校勘的卷文本的结束偏移量', null=True)
+    next_index = models.IntegerField('用于校勘的卷文本的后一卷偏移量', null=True)
     task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, default=None)
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', default=timezone.now)
@@ -207,9 +212,69 @@ class ReelCorrectText(models.Model):
             if ReelCorrectText.BODY_END_PATTERN.search(lines[i]):
                 tail_line_index = i
                 break
-        self.head = '\n'.join(lines[0 : author_line_index+1])
-        self.body = '\n'.join(lines[author_line_index+1 : tail_line_index])
+        self.head = ''.join(map(lambda x: (x + '\n'), lines[0 : author_line_index+1]))
+        self.body = ''.join(map(lambda x: (x + '\n'), lines[author_line_index+1 : tail_line_index]))
         self.tail = '\n'.join(lines[tail_line_index:])
+        if self.reel.reel_no == 1:
+            self.calculate_offset()
+
+    @classmethod
+    def get_origin_index(cls, text, char_index):
+        i = 0
+        text_len = len(text)
+        char_cnt = 0
+        for i in range(text_len):
+            if text[i] not in 'pb\n':
+                char_cnt += 1
+                if char_cnt == char_index:
+                    return (i + 1)
+
+    def calculate_offset(self):
+        sutra = self.reel.sutra
+        reel_no = self.reel.reel_no
+        tripitaka_base = Tripitaka.objects.get(code='CB')
+        if sutra.tripitaka == tripitaka_base: # CBETA不做处理，其他藏经版本与CBETA对齐
+            return
+        sutra_base = Sutra.objects.get(lqsutra=sutra.lqsutra, tripitaka=tripitaka_base)
+        reel_base = Reel.objects.get(sutra=sutra_base, reel_no=reel_no)
+        reelcorrecttext_base = ReelCorrectText.objects.filter(reel_id=reel_base.id).order_by('-id')[0]
+        text1 = ReelCorrectText.SEPARATORS_PATTERN.sub('', reelcorrecttext_base.body)
+        text2 = ReelCorrectText.SEPARATORS_PATTERN.sub('', self.body)
+        opcodes = SequenceMatcher(lambda x: x in 'pb\n', text1, text2, False).get_opcodes()
+        # 设置end_index
+        tag, i1, i2, j1, j2 = opcodes[-1]
+        if tag == 'delete':
+            reel_n = Reel.objects.get(sutra=sutra, reel_no=reel_no+1)
+            reelcorrecttext_n = ReelCorrectText.objects.filter(reel_id=reel_n.id).order_by('-id')[0]
+            newbody = self.body + reelcorrecttext_n.body
+            n_text2 = ReelCorrectText.SEPARATORS_PATTERN.sub('', newbody)
+            n_opcodes = SequenceMatcher(lambda x: x in 'pb\n', text1, n_text2, False).get_opcodes()
+            n_tag, n_i1, n_i2, n_j1, n_j2 = n_opcodes[-1]
+            if n_tag == 'insert':
+                self.next_index = ReelCorrectText.get_origin_index(reelcorrecttext_n.body, n_j1 - len(text2))
+            self.end_index = len(self.body)
+        elif tag == 'insert':
+            self.end_index = ReelCorrectText.get_origin_index(self.body, j1)
+        else:
+            self.end_index = len(self.body)
+
+        # 设置start_index
+        tag, i1, i2, j1, j2 = opcodes[0]
+        if tag == 'delete':
+            if reel_no > 1:
+                reel_p = Reel.objects.get(sutra=sutra, reel_no=reel_no-1)
+                reelcorrecttext_p = ReelCorrectText.objects.filter(reel_id=reel_p.id).order_by('-id')[0]
+                newbody = reelcorrecttext_p.body + self.body
+                p_text2 = ReelCorrectText.SEPARATORS_PATTERN.sub('', newbody)
+                p_opcodes = SequenceMatcher(lambda x: x in 'pb\n', text1, p_text2, False).get_opcodes()
+                p_tag, p_i1, p_i2, p_j1, p_j2 = p_opcodes[0]
+                if p_tag == 'insert':
+                    self.prev_index = ReelCorrectText.get_origin_index(reelcorrecttext_p.body, p_j2)
+            self.start_index = 0
+        elif tag == 'insert':
+            self.start_index = ReelCorrectText.get_origin_index(self.body, j2)
+        else:
+            self.start_index = 0
 
 class LQReelText(models.Model):
     lqreel = models.ForeignKey(LQReel, verbose_name='龙泉藏经卷', on_delete=models.CASCADE)
@@ -255,8 +320,8 @@ class DiffSegText(models.Model):
     tripitaka = models.ForeignKey(Tripitaka, on_delete=models.CASCADE)
     text = models.TextField('文本', default='', blank=True)
     position = models.IntegerField('在卷文本中的位置（前有几个字）', default=0)
-    start_char_pos = models.CharField('起始经字位置', max_length=32, default='')
-    end_char_pos = models.CharField('结束经字位置', max_length=32, default='')
+    start_char_pos = models.CharField('起始经字位置', max_length=32, default='', null=True)
+    end_char_pos = models.CharField('结束经字位置', max_length=32, default='', null=True)
 
     @property
     def column_url(self):
@@ -282,16 +347,16 @@ class DiffSegText(models.Model):
 
     @property
     def rect(self):
-        pid = self.start_char_pos[0:17]
-        line_no = self.start_char_pos[18:20]
-        char_no = self.start_char_pos[21:23]
-        start_line_no = int(line_no)
-        start_char_no = int(char_no)
-        line_no = self.end_char_pos[18:20]
-        char_no = self.end_char_pos[21:23]
-        end_line_no = int(line_no)
-        end_char_no = int(char_no)
         try:
+            pid = self.start_char_pos[0:17]
+            line_no = self.start_char_pos[18:20]
+            char_no = self.start_char_pos[21:23]
+            start_line_no = int(line_no)
+            start_char_no = int(char_no)
+            line_no = self.end_char_pos[18:20]
+            char_no = self.end_char_pos[21:23]
+            end_line_no = int(line_no)
+            end_char_no = int(char_no)
             page = Page.objects.get(pid=pid)
             cut_info = json.loads(page.cut_info)
             for ch in cut_info['char_data']:
