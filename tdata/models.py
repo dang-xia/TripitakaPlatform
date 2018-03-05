@@ -60,8 +60,8 @@ class LQSutra(models.Model):
     code = models.CharField(verbose_name='龙泉经目编码', max_length=5, blank=False)
     variant_code = models.CharField(verbose_name='龙泉经目别本编码', max_length=1, default='0')
     name = models.CharField(verbose_name='龙泉经目名称', max_length=64, blank=False)
-    author = models.CharField(verbose_name='著译者', max_length=255, blank=True)
     total_reels = models.IntegerField(verbose_name='总卷数', blank=True, default=1)
+    author = models.CharField(verbose_name='著译者', max_length=255, blank=True)
     remark = models.TextField('备注', blank=True, default='')
 
     class Meta:
@@ -80,8 +80,8 @@ class Sutra(models.Model):
     lqsutra = models.ForeignKey(LQSutra, verbose_name='龙泉经目编码', null=True,
     blank=True, on_delete=models.SET_NULL) #（为"LQ"+ 经序号 + 别本号）
     total_reels = models.IntegerField(verbose_name='总卷数', blank=True, default=1)
-    remark = models.TextField('备注', blank=True, default='')
     author = models.CharField('作译者', max_length=32, blank=True, default='')
+    remark = models.TextField('备注', blank=True, default='')
 
     class Meta:
         verbose_name = '实体经'
@@ -126,9 +126,9 @@ class Reel(models.Model):
     edition_type = models.SmallIntegerField('版本类型', choices=EDITION_TYPE_CHOICES, default=0)
     remark = models.TextField('备注', blank=True, default='')
     image_ready = models.BooleanField(verbose_name='图片状态', default=False)
-    cut_ready = models.BooleanField(verbose_name='切分数据状态', default=False)
+    cut_ready = models.BooleanField(verbose_name='文字校对生成的切分数据状态', default=False)
     column_ready = models.BooleanField(verbose_name='切列图状态', default=False)
-    ocr_ready = models.BooleanField(verbose_name='原始切分数据状态', default=False)
+    ocr_ready = models.BooleanField(verbose_name='OCR数据状态', default=False)
     correct_ready = models.BooleanField(verbose_name='是否有文字校对经文', default=False)
 
     class Meta:
@@ -165,6 +165,11 @@ class Reel(models.Model):
                 if self.path3:
                     path_lst.append(self.path3)
         return '_'.join(path_lst)
+
+    def set_correct_ready(self):
+        if not self.correct_ready:
+            self.correct_ready = True
+            self.save(update_fields=['correct_ready'])
 
 class ReelOCRText(models.Model):
     reel = models.OneToOneField(Reel, verbose_name='实体藏经卷', on_delete=models.CASCADE, primary_key=True)

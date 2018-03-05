@@ -41,7 +41,7 @@ def read_reel_info(huayan_cb, reel_no, lines):
 
     reel = Reel(sutra=huayan_cb, reel_no=reel_no, start_vol=start_vol,
     start_vol_page=start_vol_page, end_vol=end_vol, end_vol_page=end_vol_page,
-    edition_type=Reel.EDITION_TYPE_BASE, correct_ready=True)
+    edition_type=Reel.EDITION_TYPE_BASE)
     reel.save()
 
 def process_cbeta_text(huayan_cb, reel_no, lines1, lines2):
@@ -61,14 +61,14 @@ def process_cbeta_text(huayan_cb, reel_no, lines1, lines2):
             results.append(line_text + '\n')
     sutra_text = ''.join(results)
     punctuation, text = extract_punct(sutra_text)
-    reelcorrecttext = ReelCorrectText(reel=reel)
     text = read_text_info(lines1)
+    reelcorrecttext = ReelCorrectText(reel=reel)
     reelcorrecttext.set_text(text)
     reelcorrecttext.save()
     punct = Punct(reel=reel, reeltext=reelcorrecttext, punctuation=json.dumps(punctuation))
     punct.save()
 
-#得到卷信息的同时也要得到文本信息，并返回。
+#得到卷信息的同时也要得到文本信息
 def read_text_info(lines):
     reeltext = []
     for line in lines:
@@ -98,8 +98,6 @@ class Command(BaseCommand):
 
         # CBETA第1卷
         CB = Tripitaka.objects.get(code='CB')
-        #CB.sutra_set.all().delete()
-
         try:
             huayan_cb = Sutra.objects.get(sid='CB002780')
         except:
@@ -113,6 +111,7 @@ class Command(BaseCommand):
             with open(filename, 'r', encoding='utf-8') as f:
                 lines1 = f.readlines()
             filename = os.path.join(BASE_DIR, 'data/cbeta_huayan/text/CB_278_%s.txt' % reel_no)
+            text = ''
             with open(filename, 'r', encoding='utf-8') as f:
                 lines2 = f.readlines()
             read_reel_info(huayan_cb, reel_no, lines1)

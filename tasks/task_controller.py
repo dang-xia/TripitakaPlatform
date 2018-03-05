@@ -6,11 +6,10 @@ from django.db.models import Q
 
 from tdata.models import *
 from tasks.models import *
-from tasks.common import SEPARATORS_PATTERN, judge_merge_text_punct, ReelText, \
+from tasks.common import SEPARATORS_PATTERN, judge_merge_text_punct, \
 clean_separators, compute_accurate_cut
-from tasks.reeldiff_processor import generate_reeldiff
 from tasks.ocr_compare import OCRCompare
-
+from tasks.utils.punct_process import PunctProcess
 import json, re, logging, traceback
 from operator import attrgetter, itemgetter
 from difflib import SequenceMatcher
@@ -18,18 +17,7 @@ from background_task import background
 
 logger = logging.getLogger(__name__)
 
-def get_reeltext(lqsutra, tripitaka_id, reel_no):
-    sutra = Sutra.objects.get(lqsutra=lqsutra, tripitaka_id=tripitaka_id)
-    reel = Reel.objects.get(sutra=sutra, reel_no=reel_no)
-    reel_correct_texts = list(ReelCorrectText.objects.filter(reel=reel).order_by('-id')[0:1])
-    if not reel_correct_texts:
-        return None
-    reel_correct_text = reel_correct_texts[0]
-    reeltext = ReelText(reel=reel, text=reel_correct_text.text, tripitaka_id=tripitaka_id,
-    sid=sutra.sid, vol_no=reel.start_vol, start_vol_page=reel.start_vol_page)
-    return reeltext
-
-def create_correct_tasks(batchtask, reel, base_reel_lst, correct_times, correct_verify_times):
+def create_correct_tasks(batchtask, reel, base_reel_lst, sutra_to_body, correct_times, correct_verify_times):
     if reel.sutra.sid.startswith('CB'): # 不对CBETA生成任务
         return
     # Correct Task
@@ -41,30 +29,17 @@ def create_correct_tasks(batchtask, reel, base_reel_lst, correct_times, correct_
     reel_ocr_text = reel_ocr_texts[0]
 
     for base_reel in base_reel_lst:
-        reel_correct_texts = list(ReelCorrectText.objects.filter(reel=base_reel).order_by('-id')[0:1])
-        if not reel_correct_texts:
+        try:
+            base_reel_correct_text = ReelCorrectText.objects.filter(reel=base_reel).order_by('-id').first()
+        except:
             print('no base text.')
             return None
-        base_reel_correct_text = reel_correct_texts[0]
         base_text_lst = [base_reel_correct_text.head]
-        # 对于比对本，将前后两卷经文都加上
-        if base_reel.reel_no > 1:
-            base_reel_prev = list(Reel.objects.filter(sutra=base_reel.sutra, reel_no=base_reel.reel_no-1))
-            if len(base_reel_prev) > 0:
-                base_reel_prev = base_reel_prev[0]
-                reel_correct_texts = list(ReelCorrectText.objects.filter(reel=base_reel_prev).order_by('-id')[0:1])
-                if reel_correct_texts:
-                    base_text_lst.append(reel_correct_texts[0].body)
-        base_text_lst.append(base_reel_correct_text.body)
-        base_reel_next = list(Reel.objects.filter(sutra=base_reel.sutra, reel_no=base_reel.reel_no+1))
-        if len(base_reel_next) > 0:
-            base_reel_next = base_reel_next[0]
-            reel_correct_texts = list(ReelCorrectText.objects.filter(reel=base_reel_next).order_by('-id')[0:1])
-            if reel_correct_texts:
-                base_text_lst.append(reel_correct_texts[0].body)
+        base_text_lst.append(sutra_to_body[base_reel.sutra_id])
         base_text_lst.append(base_reel_correct_text.tail)
         base_text = ''.join(base_text_lst)
-        correctsegs = OCRCompare.generate_compare_reel(base_text, reel_ocr_text.text)
+        ocr_text = OCRCompare.preprocess_ocr_text(reel_ocr_text.text)
+        correctsegs = OCRCompare.generate_compare_reel(base_text, ocr_text)
 
     task_id_lst = []
     for task_no in range(1, correct_times + 1):
@@ -114,9 +89,8 @@ def create_punct_tasks(batchtask, reel, punct_times, punct_verify_times):
         CB = Tripitaka.objects.get(code='CB')
         sutra_cb = Sutra.objects.get(lqsutra=reel.sutra.lqsutra, tripitaka=CB)
         reel_cb = Reel.objects.get(sutra=sutra_cb, reel_no=reel.reel_no)
-        punct = Punct.objects.filter(reel=reel_cb)[0]        
-        _puncts = ReelProcess().new_puncts(punct.reeltext.text, json.loads(punct.punctuation), reelcorrecttext.text)
-        task_puncts = json.dumps(_puncts, separators=(',', ':'))
+        punct = Punct.objects.filter(reel=reel_cb)[0]
+        task_puncts = PunctProcess.create_new(reel, reelcorrecttext.text)
     except:
         pass
     for task_no in range(1, punct_times + 1):
@@ -131,6 +105,13 @@ def create_punct_tasks(batchtask, reel, punct_times, punct_verify_times):
         reeltext=reelcorrecttext, result='[]', task_no=task_no,
         status=Task.STATUS_NOT_READY, publisher=batchtask.publisher)
         task.save()
+
+def get_sutra_body(sutra):
+    body_lst = []
+    for reel in Reel.objects.filter(sutra=sutra).order_by('reel_no'):
+        reel_correct_text = ReelCorrectText.objects.filter(reel=reel).order_by('-id').first()
+        body_lst.append(reel_correct_text.body)
+    return '\n\n'.join(body_lst)
 
 # 从龙泉大藏经来发布
 def create_tasks_for_batchtask(batchtask, reel_lst,
@@ -147,6 +128,7 @@ lqmark_times = 0, lqmark_verify_times = 0):
     if correct_times > 2:
         correct_times = 2
 
+    sutra_to_body = {}
     for lqsutra, reel_no in reel_lst:
         # 创建文字校对任务
         origin_sutra_lst = list(lqsutra.sutra_set.all())
@@ -162,6 +144,8 @@ lqmark_times = 0, lqmark_verify_times = 0):
         for sutra in sutra_lst:
             if sutra.sid.startswith('CB'):
                 first_base_sutra = sutra
+                if sutra.id not in sutra_to_body:
+                    sutra_to_body[sutra.id] = get_sutra_body(sutra)
             # # 暂时不使用高丽藏作为比对本
             # if sutra.sid.startswith('GL'):
             #     second_base_sutra = sutra
@@ -183,7 +167,7 @@ lqmark_times = 0, lqmark_verify_times = 0):
             except:
                 # TODO: 记录错误
                 continue
-            create_correct_tasks(batchtask, reel, base_reel_lst, correct_times, correct_verify_times)
+            create_correct_tasks(batchtask, reel, base_reel_lst, sutra_to_body, correct_times, correct_verify_times)
             create_punct_tasks(batchtask, reel, punct_times, punct_verify_times)
 
         try:
@@ -193,95 +177,9 @@ lqmark_times = 0, lqmark_verify_times = 0):
         except:
             print('create judge task failed: ', lqsutra, reel_no)
 
-def create_reeldiff_for_judge_task(lqreel, lqsutra):
-    reel_no = lqreel.reel_no
-    judge_task_lst = list(Task.objects.filter(lqreel=lqreel, typ=Task.TYPE_JUDGE, status=Task.STATUS_NOT_READY))
-    if not judge_task_lst:
-        print('没有校勘判取任务: ', lqreel)
-        logging.info('没有校勘判取任务: %s' % lqreel)
-        return None
-
-    sutra_lst = list(lqsutra.sutra_set.all())
-    sutra_id_lst = [sutra.id for sutra in sutra_lst]
-
-    # 找实体卷，底本和对校本
-    reel_lst = list(Reel.objects.filter(sutra_id__in=sutra_id_lst, reel_no=reel_no, edition_type__in=[Reel.EDITION_TYPE_BASE, Reel.EDITION_TYPE_CHECKED]))
-    reel_id_lst = [reel.id for reel in reel_lst]
-    if len(reel_lst) <= 1:
-        return None
-
-    try:
-        base_reel_index = reel_id_lst.index(judge_task_lst[0].base_reel.id)
-    except:
-        logging.error('校勘判取任务%s设定的底本不存在' % judge_task_lst[0].id)
-        return None
-    # 将底本换到第一个位置
-    reel = reel_lst[base_reel_index]
-    reel_lst[base_reel_index] = reel_lst[0]
-    reel_lst[0] = reel
-    reel_id_lst = [reel.id for reel in reel_lst]
-    new_sutra_lst = [reel.sutra for reel in reel_lst]
-    reel_correct_ready = [r.correct_ready for r in reel_lst]
-
-    # 检查除底本外的其他版本的前一卷是否都已做完文字校对
-    prev_reel_correct_ready = []
-    if reel_no > 1:
-        prev_reel_lst = [ Reel.objects.get(sutra=sutra, reel_no=reel_no-1) for sutra in new_sutra_lst[1:]]
-        prev_reel_correct_ready = [r.correct_ready or (not r.ocr_ready) for r in prev_reel_lst]
-
-    # 检查除底本外的其他版本的后一卷是否都已做完文字校对
-    next_reel_correct_ready = []
-    for sutra in new_sutra_lst[1:]:
-        if reel_no < sutra.total_reels:
-            r = Reel.objects.get(sutra=sutra, reel_no=reel_no+1)
-            if r.ocr_ready:
-                next_reel_correct_ready.append(r.correct_ready)
-    if all(reel_correct_ready) and all(prev_reel_correct_ready) and all(next_reel_correct_ready):
-        pass
-    else:
-        logging.info('此卷的文字校对还未完成，暂时不触发校勘判取任务')
-        return None
-
-    reel_id_to_text = {}
-    reel_id_to_reel_correct_text = {}
-    for reel_correct_text in ReelCorrectText.objects.filter(reel_id__in=reel_id_lst):
-        reel_id = reel_correct_text.reel_id
-        if reel_id in reel_id_to_text and reel_id_to_reel_correct_text[reel_id].created_at > reel_correct_text.created_at:
-            pass
-        else:
-            reel_id_to_text[reel_id] = reel_correct_text.text
-            reel_id_to_reel_correct_text[reel_id] = reel_correct_text
-    if len(reel_id_to_text) != len(reel_lst):
-        print('reel_id_to_text', reel_lst)
-        logging.info('此卷的文字校对还未完成，暂时不触发校勘判取任务')
-        return None
-    correct_text_lst = []
-    reel_correct_text_lst = []
-    for reel in reel_lst:
-        correct_text_lst.append( reel_id_to_text[reel.id] )
-        reel_correct_text_lst.append( reel_id_to_reel_correct_text[reel.id] )
-
-    base_text = ReelCorrectText.objects.filter(reel_id=reel_lst[0].id).order_by('-id')[0]
-    reeldiff = ReelDiff(lqsutra=lqsutra, reel_no=reel_no, base_text=base_text)
-    reeldiff.save()
-    #reeldiff.correct_texts.set(reel_correct_text_lst)
-
-    generate_reeldiff(reeldiff, new_sutra_lst, reel_lst)
-    for task in judge_task_lst:
-        for diffseg in reeldiff.diffseg_set.all():
-            diffsegresult = DiffSegResult(task=task, diffseg=diffseg, selected_text='')
-            diffsegresult.save()
-
-    task_id_lst = [task.id for task in judge_task_lst]
-    Task.objects.filter(id__in=task_id_lst).update(reeldiff=reeldiff, status=Task.STATUS_READY)
-    judge_verify_task_lst = list(Task.objects.filter(lqreel=lqreel, typ=Task.TYPE_JUDGE_VERIFY, status=Task.STATUS_NOT_READY))
-    task_id_lst = [task.id for task in judge_verify_task_lst]
-    Task.objects.filter(id__in=task_id_lst).update(reeldiff=reeldiff)
-    #Task.objects.filter(id__in=task_id_lst).update(reeldiff=reeldiff, status=Task.STATUS_PROCESSING) # for test
-
 def publish_correct_result(task):
     '''
-    发布文字校对的结果
+    发布文字校对的结果，供校勘判取使用
     '''
     print('publish_correct_result')
     sutra = task.reel.sutra
@@ -293,11 +191,9 @@ def publish_correct_result(task):
         with transaction.atomic():
             reeltext_count = ReelCorrectText.objects.filter(task_id=task.id).count()
             if reeltext_count == 0:
-                reel_correct_text = ReelCorrectText(reel=task.reel, task=task, publisher=task.picker)
-                reel_correct_text.set_text(task.result)
+                reel_correct_text = ReelCorrectText(reel=task.reel, text=task.result, task=task, publisher=task.picker)
                 reel_correct_text.save()
-                task.reel.correct_ready = True
-                task.reel.save(update_fields=['correct_ready'])
+                task.reel.set_correct_ready()
     else: # 与最新的一份记录比较
         text1 = saved_reel_correct_texts[0].text
         text2 = task.result
@@ -305,11 +201,9 @@ def publish_correct_result(task):
             with transaction.atomic():
                 reeltext_count = ReelCorrectText.objects.filter(task_id=task.id).count()
                 if reeltext_count == 0:
-                    reel_correct_text = ReelCorrectText(reel=task.reel, task=task, publisher=task.picker)
-                    reel_correct_text.set_text(task.result)
+                    reel_correct_text = ReelCorrectText(reel=task.reel, text=task.result, task=task, publisher=task.picker)
                     reel_correct_text.save()
-                    task.reel.correct_ready = True
-                    task.reel.save(update_fields=['correct_ready'])
+                    task.reel.set_correct_ready()
                     text_changed = True
         else:
             return
@@ -323,7 +217,7 @@ def publish_correct_result(task):
             traceback.print_exc()
 
         text = SEPARATORS_PATTERN.sub('', reel_correct_text.text)
-        task_puncts = Punct.create_new(task.reel, text)
+        task_puncts = PunctProcess.create_new(task.reel, text)
         punct = Punct(reel=task.reel, reeltext=reel_correct_text, punctuation=task_puncts)
         punct.save()
 
@@ -346,11 +240,8 @@ def publish_correct_result(task):
         print('没找到龙泉藏经卷对应的记录')
         logging.error('没找到龙泉藏经卷对应的记录')
         return None
-
-    try:
-        create_reeldiff_for_judge_task(lqreel, lqsutra)
-    except:
-        traceback.print_exc()
+    if is_sutra_ready_for_judge(lqsutra):
+        create_data_for_judge_tasks(batch_task, lqsutra, base_sutra, lqsutra.total_reels)
 
 CORRECT_RESULT_FILTER = re.compile('[ 　ac-oq-zA-Z0-9.?\-",/，。、：]')
 def generate_correct_result(task):
@@ -358,11 +249,12 @@ def generate_correct_result(task):
     for correctseg in CorrectSeg.objects.filter(task=task).order_by('id'):
         text_lst.append(correctseg.selected_text)
     result = ''.join(text_lst)
-    result = CORRECT_RESULT_FILTER.sub('', result)
+    # result = CORRECT_RESULT_FILTER.sub('', result)
     # 清除空行
-    text_lst = result.replace('p', '\np\n').replace('b', '\nb\n').split('\n')
-    new_text_lst = [text for text in text_lst if text != '']
-    task.result = '\n'.join(new_text_lst)
+    # text_lst = result.replace('p', '\np\n').replace('b', '\nb\n').split('\n')
+    # new_text_lst = [text for text in text_lst if text != '']
+    # task.result = '\n'.join(new_text_lst)
+    task.result = result
     task.save(update_fields=['result'])
 
 def correct_submit(task):
@@ -391,14 +283,23 @@ def correct_submit(task):
             # 比较一组的两个文字校对任务的结果
             correctsegs = OCRCompare.generate_compare_reel(correct_tasks[0].result, correct_tasks[1].result)
             from_correctsegs = list(CorrectSeg.objects.filter(task=correct_tasks[1]).order_by('id'))
+            OCRCompare.reset_segposition(from_correctsegs)
             OCRCompare.set_position(from_correctsegs, correctsegs)
             for correctseg in correctsegs:
                 correctseg.task = correct_verify_task
                 correctseg.id = None
-            CorrectSeg.objects.bulk_create(correctsegs)        
+            CorrectSeg.objects.bulk_create(correctsegs)
+            
 
             # 文字校对审定任务设为待领取
             correct_verify_task.status = Task.STATUS_READY
+            task_ids = correct_tasks.values_list('id', flat=True)
+
+            new_doubt_segs = OCRCompare.combine_correct_doubtseg(correct_tasks[0].doubt_segs.all(), correct_tasks[1].doubt_segs.all())        
+            for doubt_seg in new_doubt_segs:
+                doubt_seg.task = correct_verify_task
+                doubt_seg.id = None
+            DoubtSeg.objects.bulk_create(new_doubt_segs)
             correct_verify_task.save(update_fields=['status'])
 
 def correct_verify_submit(task):
@@ -442,7 +343,7 @@ def judge_submit_result(task):
     # 比较校勘判取任务的结果
     diffsegresults_lst = []
     for i in range(task_count):
-        diffsegresults = list(DiffSegResult.objects.filter(task_id=judge_tasks[i].id).order_by('diffseg__diffseg_no').all())
+        diffsegresults = list(DiffSegResult.objects.filter(task_id=judge_tasks[i].id).order_by('diffseg__base_pos').all())
         diffsegresults_lst.append(diffsegresults)
 
     to_save_diffsegresults = []
@@ -482,7 +383,6 @@ def publish_judge_result(task):
         return
     base_correct_text = task.reeldiff.base_text
     base_text = clean_separators(base_correct_text.text)
-    base_tripitaka_id = base_correct_text.reel.sutra.tripitaka_id
     text_lst = []
     base_index = 0
     base_text_length = len(base_text)
@@ -515,7 +415,7 @@ def publish_judge_result(task):
             sutra_cb = Sutra.objects.get(lqsutra=task.lqreel.lqsutra, tripitaka=Tripitaka.objects.get(code='CB'))
             reel_cb = Reel.objects.get(sutra=sutra_cb, reel_no=task.lqreel.reel_no)
             punct = Punct.objects.filter(reel=reel_cb).first()
-            _puncts = ReelProcess().new_puncts(punct.reeltext.text, json.loads(punct.punctuation), lqreeltext.text)
+            _puncts = PunctProcess().new_puncts(punct.reeltext.text, json.loads(punct.punctuation), lqreeltext.text)
             task_puncts = json.dumps(_puncts, separators=(',', ':'))
 
             punct = LQPunct(lqreel=task.lqreel, lqreeltext=lqreeltext, punctuation=task_puncts)

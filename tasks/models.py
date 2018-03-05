@@ -4,7 +4,6 @@ from django.utils import timezone
 from jwt_auth.models import Staff
 from tdata.models import *
 from difflib import SequenceMatcher
-from tasks.utils.reel_process import ReelProcess
 import re, json
 
 # # class SutraStatus(models.Model):
@@ -172,15 +171,11 @@ class ReelCorrectText(models.Model):
     BODY_END_PATTERN = re.compile('卷第[一二三四五六七八九十百]*$')
     SEPARATORS_PATTERN = re.compile('[pb\n]')
 
-    reel = models.ForeignKey(Reel, verbose_name='实体藏经卷', on_delete=models.CASCADE)
+    reel = models.ForeignKey(Reel, related_name='reel_correct_texts' ,verbose_name='实体藏经卷', on_delete=models.CASCADE)
     text = SutraTextField('经文', blank=True) # 文字校对或文字校对审定后得到的经文
     head = SutraTextField('经文正文前文本', blank=True, default='')
     body = SutraTextField('经文正文', blank=True, default='')
     tail = SutraTextField('经文正文后文本', blank=True, default='')
-    prev_index = models.IntegerField('用于校勘的卷文本的前一卷偏移量', null=True)
-    start_index = models.IntegerField('用于校勘的卷文本的起始偏移量', null=True, default=0)
-    end_index = models.IntegerField('用于校勘的卷文本的结束偏移量', null=True)
-    next_index = models.IntegerField('用于校勘的卷文本的后一卷偏移量', null=True)
     task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, default=None)
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', default=timezone.now)
@@ -207,7 +202,7 @@ class ReelCorrectText(models.Model):
                 author_line_index = i
                 break
         tail_line_index = line_cnt
-        line_index = max(line_cnt-5, 0)
+        line_index = max(line_cnt-20, 0)
         for i in range(line_cnt-1, line_index, -1):
             if ReelCorrectText.BODY_END_PATTERN.search(lines[i]):
                 tail_line_index = i
@@ -215,66 +210,6 @@ class ReelCorrectText(models.Model):
         self.head = ''.join(map(lambda x: (x + '\n'), lines[0 : author_line_index+1]))
         self.body = ''.join(map(lambda x: (x + '\n'), lines[author_line_index+1 : tail_line_index]))
         self.tail = '\n'.join(lines[tail_line_index:])
-        if self.reel.reel_no == 1:
-            self.calculate_offset()
-
-    @classmethod
-    def get_origin_index(cls, text, char_index):
-        i = 0
-        text_len = len(text)
-        char_cnt = 0
-        for i in range(text_len):
-            if text[i] not in 'pb\n':
-                char_cnt += 1
-                if char_cnt == char_index:
-                    return (i + 1)
-
-    def calculate_offset(self):
-        sutra = self.reel.sutra
-        reel_no = self.reel.reel_no
-        tripitaka_base = Tripitaka.objects.get(code='CB')
-        if sutra.tripitaka == tripitaka_base: # CBETA不做处理，其他藏经版本与CBETA对齐
-            return
-        sutra_base = Sutra.objects.get(lqsutra=sutra.lqsutra, tripitaka=tripitaka_base)
-        reel_base = Reel.objects.get(sutra=sutra_base, reel_no=reel_no)
-        reelcorrecttext_base = ReelCorrectText.objects.filter(reel_id=reel_base.id).order_by('-id')[0]
-        text1 = ReelCorrectText.SEPARATORS_PATTERN.sub('', reelcorrecttext_base.body)
-        text2 = ReelCorrectText.SEPARATORS_PATTERN.sub('', self.body)
-        opcodes = SequenceMatcher(lambda x: x in 'pb\n', text1, text2, False).get_opcodes()
-        # 设置end_index
-        tag, i1, i2, j1, j2 = opcodes[-1]
-        if tag == 'delete':
-            reel_n = Reel.objects.get(sutra=sutra, reel_no=reel_no+1)
-            reelcorrecttext_n = ReelCorrectText.objects.filter(reel_id=reel_n.id).order_by('-id')[0]
-            newbody = self.body + reelcorrecttext_n.body
-            n_text2 = ReelCorrectText.SEPARATORS_PATTERN.sub('', newbody)
-            n_opcodes = SequenceMatcher(lambda x: x in 'pb\n', text1, n_text2, False).get_opcodes()
-            n_tag, n_i1, n_i2, n_j1, n_j2 = n_opcodes[-1]
-            if n_tag == 'insert':
-                self.next_index = ReelCorrectText.get_origin_index(reelcorrecttext_n.body, n_j1 - len(text2))
-            self.end_index = len(self.body)
-        elif tag == 'insert':
-            self.end_index = ReelCorrectText.get_origin_index(self.body, j1)
-        else:
-            self.end_index = len(self.body)
-
-        # 设置start_index
-        tag, i1, i2, j1, j2 = opcodes[0]
-        if tag == 'delete':
-            if reel_no > 1:
-                reel_p = Reel.objects.get(sutra=sutra, reel_no=reel_no-1)
-                reelcorrecttext_p = ReelCorrectText.objects.filter(reel_id=reel_p.id).order_by('-id')[0]
-                newbody = reelcorrecttext_p.body + self.body
-                p_text2 = ReelCorrectText.SEPARATORS_PATTERN.sub('', newbody)
-                p_opcodes = SequenceMatcher(lambda x: x in 'pb\n', text1, p_text2, False).get_opcodes()
-                p_tag, p_i1, p_i2, p_j1, p_j2 = p_opcodes[0]
-                if p_tag == 'insert':
-                    self.prev_index = ReelCorrectText.get_origin_index(reelcorrecttext_p.body, p_j2)
-            self.start_index = 0
-        elif tag == 'insert':
-            self.start_index = ReelCorrectText.get_origin_index(self.body, j2)
-        else:
-            self.start_index = 0
 
 class LQReelText(models.Model):
     lqreel = models.ForeignKey(LQReel, verbose_name='龙泉藏经卷', on_delete=models.CASCADE)
@@ -298,7 +233,7 @@ class ReelDiff(models.Model):
     published_at = models.DateTimeField('发布时间', blank=True, null=True)
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True,
     verbose_name='发布用户')
-    correct_texts = models.ManyToManyField(ReelCorrectText) # TODO
+    correct_texts = models.ManyToManyField(ReelCorrectText)
     diffseg_pos_lst = models.TextField('DiffSeg位置信息')
 
 class DiffSeg(models.Model):
@@ -318,8 +253,9 @@ class DiffSegText(models.Model):
     """
     diffseg = models.ForeignKey(DiffSeg, on_delete=models.CASCADE, related_name='diffsegtexts')
     tripitaka = models.ForeignKey(Tripitaka, on_delete=models.CASCADE)
-    text = models.TextField('文本', default='', blank=True)
+    text = models.TextField('文本', blank=True, null=True)
     position = models.IntegerField('在卷文本中的位置（前有几个字）', default=0)
+    offset = models.IntegerField('所在卷文本在整部经文中位置', default=0)
     start_char_pos = models.CharField('起始经字位置', max_length=32, default='', null=True)
     end_char_pos = models.CharField('结束经字位置', max_length=32, default='', null=True)
 
@@ -432,6 +368,7 @@ class Punct(models.Model):
     reel = models.ForeignKey(Reel, verbose_name='实体藏经卷', on_delete=models.CASCADE)
     reeltext = models.ForeignKey(ReelCorrectText, verbose_name='实体藏经卷经文', on_delete=models.CASCADE)
     punctuation = models.TextField('标点', blank=True, null=True) # [[5,'，'], [15,'。']]
+    body_punctuation = models.TextField('文本标点', blank=True, null=True)
     task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True) # Task=null表示原始标点结果，不为null表示标点任务和标点审定任务的结果
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', blank=True, null=True, auto_now_add=True)
@@ -440,22 +377,6 @@ class Punct(models.Model):
         verbose_name = '基础标点结果'
         verbose_name_plural = '基础标点结果'
 
-    @staticmethod
-    def create_new(reel, newtext):
-        '''
-        增加新的标点信息
-        '''
-        sutra_cb = Sutra.objects.get(lqsutra=reel.sutra.lqsutra, tripitaka=Tripitaka.objects.get(code='CB'))
-        reel_cb = Reel.objects.get(sutra=sutra_cb, reel_no=reel.reel_no)
-        # 这里找的CBETA来源的标点
-        try:
-            punct = Punct.objects.filter(reel=reel_cb).first()
-            _puncts = ReelProcess().new_puncts(punct.reeltext.text, json.loads(punct.punctuation), newtext)
-            task_puncts = json.dumps(_puncts, separators=(',', ':'))
-            return task_puncts
-        except:
-            return '[]'
-
     def __str__(self):
         return '%s' % self.reeltext
 
@@ -463,6 +384,7 @@ class LQPunct(models.Model):
     lqreel = models.ForeignKey(LQReel, verbose_name='龙泉藏经卷', on_delete=models.CASCADE)
     lqreeltext = models.ForeignKey(LQReelText, verbose_name='龙泉藏经卷经文', on_delete=models.CASCADE)
     punctuation = models.TextField('标点', blank=True, null=True) # [[5,'，'], [15,'。']]
+    body_punctuation = models.TextField('文本标点', blank=True, null=True)
     task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True) # Task=null表示原始标点结果，不为null表示标点任务和标点审定任务的结果
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', blank=True, null=True)
@@ -473,6 +395,7 @@ class LQPunct(models.Model):
 
     def __str__(self):
         return '%s' % self.lqreeltext
+
 
 # 格式标注相关
 class MarkUnitBase(models.Model):

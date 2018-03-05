@@ -30,10 +30,8 @@ class Command(BaseCommand):
             lines = f.readlines()
             for line in lines:
                 line = line.rstrip()
-                sutra_no, name, reel_no, start_vol, start_vol_page, end_vol_page = line.split('\t')
-                tcode = sutra_no[:2]
-                sutra_code = int(sutra_no[2:])
-                sid = '%s%05d0' % (tcode, sutra_code)
+                sid, name, reel_no, start_vol, start_vol_page, end_vol_page = line.split('\t')
+                tcode = sid[:2]
                 reel_no = int(reel_no)
                 try:
                     start_vol = int(start_vol)
@@ -56,6 +54,6 @@ class Command(BaseCommand):
                     reel = Reel.objects.get(sutra=sutra, reel_no=reel_no)
                 except:
                     reel = Reel(sutra=sutra, reel_no=reel_no, start_vol=start_vol, start_vol_page=start_vol_page,
-                    end_vol=end_vol, end_vol_page=end_vol_page, ocr_ready=True)
+                    end_vol=end_vol, end_vol_page=end_vol_page)
                     reel_lst.append(reel)
             Reel.objects.bulk_create(reel_lst)

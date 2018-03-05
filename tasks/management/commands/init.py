@@ -15,7 +15,8 @@ import traceback
 import re, json
 
 def save_reel(lqsutra, sid, reel_no, start_vol, start_vol_page, end_vol_page,
-    path1='', path2='', path3='', correct_ready=False):
+    ocr_ready=True, correct_ready=True,
+    path1='', path2='', path3=''):
     tcode = sid[:2]
     tripitaka = Tripitaka.objects.get(code=tcode)
     try:
@@ -30,7 +31,8 @@ def save_reel(lqsutra, sid, reel_no, start_vol, start_vol_page, end_vol_page,
     except:
         reel = Reel(sutra=sutra, reel_no=reel_no, start_vol=start_vol,
         start_vol_page=start_vol_page, end_vol=start_vol, end_vol_page=end_vol_page, edition_type=Reel.EDITION_TYPE_CHECKED,
-        path1=path1, path2=path2, path3=path3, correct_ready=correct_ready)
+        path1=path1, path2=path2, path3=path3,
+        ocr_ready=ocr_ready, correct_ready=correct_ready)
         reel.save()
     try:
         reel_ocr_text = ReelOCRText.get(reel=reel)
@@ -86,13 +88,7 @@ class Command(BaseCommand):
         huayan_yb_1, reel_ocr_text_yb_1 = save_reel(lqsutra, 'YB000860', 1, 27, 1, 23, '27')
 
         # create BatchTask
-        BatchTask.objects.all().delete()
-        priority = 2
-        CORRECT_TIMES = 2
-        CORRECT_VERIFY_TIMES = 1
-        JUDGE_TIMES = 2
-        JUDGE_VERIFY_TIMES = 1
-        batch_task = BatchTask(priority=priority, publisher=admin)
+        batch_task = BatchTask(priority=2, publisher=admin)
         batch_task.save()
 
         # create Tasks
@@ -121,24 +117,22 @@ class Command(BaseCommand):
                 correctseg.id = None
             CorrectSeg.objects.bulk_create(correctsegs)
 
-        # # 用于测试计算精确切分数据
-        # try:
-        #     reelcorrecttext = ReelCorrectText.objects.get(reel=huayan_yb_1)
-        # except:
-        #     filename = os.path.join(BASE_DIR, 'data/sutra_text/%s_001_fixed.txt' % 'YB000860')
-        #     with open(filename, 'r', encoding='utf-8') as f:
-        #         text = f.read()
-        #         reel_correct_text = ReelCorrectText(reel=huayan_yb_1)
-        #         reel_correct_text.set_text(text)
-        #         reel_correct_text.save()
-        #         huayan_yb_1.correct_ready = True
-        #         huayan_yb_1.save(update_fields=['correct_ready'])
+        # 用于测试计算精确切分数据
+        try:
+            reelcorrecttext = ReelCorrectText.objects.get(reel=huayan_yb_1)
+        except:
+            filename = os.path.join(BASE_DIR, 'data/sutra_text/%s_001_fixed.txt' % 'YB000860')
+            with open(filename, 'r', encoding='utf-8') as f:
+                text = f.read()
+                reelcorrecttext = ReelCorrectText(reel=huayan_yb_1)
+                reelcorrecttext.set_text(text)
+                reelcorrecttext.save()
 
-        # # 得到精确的切分数据
-        # try:
-        #     compute_accurate_cut(huayan_yb_1)
-        # except Exception:
-        #     traceback.print_exc()
+        # 得到精确的切分数据
+        try:
+            compute_accurate_cut(huayan_yb_1)
+        except Exception:
+            traceback.print_exc()
 
 
 
