@@ -7,34 +7,18 @@
       <div class="canvas-pane">
         <canvas id="page-canvas"></canvas>
       </div>
+      <div>
+        <select v-model="scale">
+          <option value="1">1倍</option>
+          <option value="2">2倍</option>
+          <option value="3">3倍</option>
+          <option value="4">4倍</option>
+        </select>
+      </div>
     </div>
     <div class="col-md-5 right-pane">
- 
-
-
-      <div class="diff-text-pane" @scroll="handleScroll" >
-        <transition name="slide-fade" appear>
-            <div v-if="scrolled || (!scrolled)" style="position: inherit;"class='cmd-block'>
-                <el-button :disabled="premitSubmit" @click="finishTask()" type="primary" plain>完成</el-button>
-                <el-button @click="nextPopup({})" type="success" plain>下一个</el-button>
-                <el-button @click="nextPopup({shiftKey: true})" type="success" plain>前一个</el-button>
-                <el-switch
-                  v-model="display_space"
-                  active-text=""
-                  inactive-text="删除位显示">
-                </el-switch>
-                <el-switch
-                  v-model="display_newline"
-                  active-text=""
-                  inactive-text="换行显示">
-                </el-switch>
-            </div>
-        </transition>
-        <div class="reel-text-region-o"  @keydown.tab="nextPopup($event)" >
-          {% raw %}
-          <div id="reel-text-compare" class="reel-text-compare">
-            <div class="operation">
-                <el-popover ref='popover' width="300" style="position: absolute; top: -500;" placement="bottom" trigger="manual" popper-class="elpopup">
+      <div class="operation" @keydown.tab="nextPopup($event)">
+                <el-popover ref='popover' width="300" style="position: absolute; top: -500;" placement="bottom" popper-class="elpopup" trigger="manual" >
                         <el-row :gutter="20">
                           <el-col :offset="1" :span="6"><div class="grid-content bg-purple"><el-tag>比对本</el-tag></div></el-col>
                           <el-col :span="17"><div class="grid-content bg-purple"><span @click="choiceText(current_seg, current_seg.text1, $event)" class='selection' v-html="spanContent(current_seg.text1)"></span></div></el-col>
@@ -49,13 +33,87 @@
                         </el-row>
                 </el-popover>
             </div>
+      <div class="diff-text-pane" @scroll="handleScroll">
+        <transition name="slide-fade" appear>
+            <div v-if="scrolled || (!scrolled)" style="position: inherit;"class='cmd-block'>
+                <el-button :disabled="premitSubmit" @click="finishTask()" type="primary" plain>完成</el-button>
+                <el-button @click="nextPopup({})" type="success" plain>后一个</el-button>
+                <el-button @click="nextPopup({shiftKey: true})" type="success" plain>前一个</el-button>
+                <el-switch
+                  v-model="display_space"
+                  active-text=""
+                  inactive-text="删除位显示">
+                </el-switch>
+                <el-switch
+                  v-model="display_newline"
+                  active-text=""
+                  inactive-text="换行显示">
+                </el-switch>
+                <el-button type="success" @click="openDoubtForm">存疑</el-button>
+
+            </div>
+        </transition>
+        <div class="reel-text-region-o"  @keydown.tab="nextPopup($event)" >
+          
+          <div id="reel-text-compare" class="reel-text-compare">
+            {% raw %}
+            
             <div class="spn" v-for="(seg, index) in sharedata.correctsegs" :id="'segdiff-' + seg.id">
-              <span v-if="seg.tag == 1" v-html="getSegText(seg)" @mouseup="textSelection(seg)" @keydown="blockthem" :class="{ changed: (seg.text2 != seg.selected_text) }" @click="segClick(seg, $event)" contenteditable="true" @input="segInput(seg, $event)" /></span><span v-if="seg.tag == 2" v-html="getSegText(seg)" @mouseup="textSelection(seg)"  @keydown="blockthem" class="difftext" :class="{ confirmed: (seg.selected_text!=null)}" @click="segClick(seg, $event)" contenteditable="true" @input="segInput(seg, $event)"></span><span v-if="seg.tag == 3" @keydown="blockthem" v-html="getSegText(seg)" contenteditable="false"></span><span class="newline" v-if="seg.tag == 4" contenteditable="true" @keydown="permitNewline" @click="segClick(seg, $event)" @input="segInput(seg, $event)" v-html="getSegText(seg)"></span>
+              <span v-if="seg.tag == 1" v-html="getSegText(seg)" @click="textSelection(seg, $event)" @keydown="blockthem" :class="{ changed: (seg.text2 != seg.selected_text), current: (current_seg.id == seg.id) }" contenteditable="true" @input="segInput(seg, $event)" /></span><span v-if="seg.tag == 2" v-html="getSegText(seg)" @click="textSelection(seg, $event)"  @keydown="blockthem" class="difftext" :class="{ confirmed: (seg.selected_text!=null), current: (current_seg.id == seg.id)}" contenteditable="true" @input="segInput(seg, $event)"></span><span v-if="seg.tag == 3" @keydown="blockthem" v-html="getSegText(seg)" contenteditable="false"></span><span class="newline" v-if="seg.tag == 4" contenteditable="true" @keydown="permitNewline" @click="segClick(seg, $event)" @input="segInput(seg, $event)" v-html="getSegText(seg)"></span>
             </div>
           </div>
+          <el-dialog title="存疑意见" :visible.sync="doubt.formVisible">
+            <el-form :model="doubt" ref="doubt" label-position="right" >
+              <el-col :span="16">
+                <el-form-item label="存疑文本" label-width="120px">
+                  <el-input v-model="doubt.doubt_text" :disabled="true" auto-complete="off"></el-input>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="存疑偏移" label-width="33%">
+                  <el-input v-model="doubt.doubt_char_no" :disabled="true" auto-complete="off"></el-input>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="存疑页" label-width="120px">
+                  <el-input v-model="doubt.page_no" :disabled="true" auto-complete="off"></el-input>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="存疑行" label-width="33%">
+                  <el-input v-model="doubt.line_no" :disabled="true" auto-complete="off"></el-input>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="存疑字" label-width="33%">
+                  <el-input v-model="doubt.char_no" :disabled="true" auto-complete="off"></el-input>
+                </el-form-item>
+              </el-col>
+              <el-form-item label="存疑理由" prop="doubt_comment" :rules="[
+                    { required: true, message: '存疑理由不能为空', trigger: 'blur'},
+                  ]" label-width="120px" >
+                  <el-input v-model="doubt.doubt_comment" required auto-complete="off"></el-input>
+                </el-form-item>
+            </el-form>
+            <div slot="footer" class="dialog-footer">
+              <el-button @click="doubt.formVisible = false">取 消</el-button>
+              <el-button type="primary" @click="submitForm('doubt')">确 定</el-button>
+            </div>
+          </el-dialog>
           {% endraw %}
         </div>
       </div>
+      {% raw %}
+      <el-collapse v-model="activeNames" @change="handleChange">
+        <el-collapse-item name="1">
+          <template slot="title">
+          <span ><i class="el-icon-date"></i> 存疑列表</span>
+          <el-button v-if="doubt_count!=0" type="primary" size="mini" round>{{doubt_count}}</el-button>
+          </template>
+          <div is="doubt-list" :doubts.sync="doubts" :task_id="sharedata.task_id" :current_doubt.sync="current_doubt"></div>
+        </el-collapse-item>
+      </el-collapse>
+      {% endraw %}
     </div>
   </div>
 </form>
@@ -78,12 +136,55 @@
       line_no: 1,
       char_no: 1,
       current_char_no: 1,
-      sharedata: {task_id: {{ task.id }}, status: 0, correctsegs: []  }
+      sharedata: {task_id: {{ task.id }}, status: 0, correctsegs: []  },
+      doubt:{ 
+        formVisible: false,
+        doubt_text: '',
+        line_no: 0,
+        page_no: 0,
+        char_no: 0,
+        doubt_char_no: 0, 
+        doubt_comment: '',
+      },
+      current_doubt: {},
+      doubts: [],
+      activeNames: [],
+      scale: 1,
+      img_url: '',
+      x: 0,
+      y: 0,
+      w: 0,
+      h: 0
     },
     computed: {
       premitSubmit: function (){
         let empty_segs = _.filter(this.sharedata.correctsegs, function(o) { return o.selected_text == null; });
         return (empty_segs.length != 0) || (this.sharedata.status == 4)
+      },
+      doubt_count: function(){
+        return this.doubts.length;
+      }
+    },
+    watch: {
+      current_doubt: {
+        handler: function (val, oldVal) { 
+          if (val == null) { return }
+          // console.log(val.page_no, val.line_no, val.char_no)
+          let seg = _.find(this.sharedata.correctsegs, function(o) { 
+            return o.page_no == val.page_no && o.line_no == val.line_no && o.char_no == val.char_no; })
+          // 当审查校对时，字号被合并的情况，只需要页，行一致。
+          seg = seg ||  _.find(this.sharedata.correctsegs, function(o) { 
+            return o.page_no == val.page_no && o.line_no == val.line_no })
+          if (seg) {
+            this.gotoDoubtSeg(seg, val);
+          }
+        },
+        deep: true
+      },
+      scale: function (val, oldVal) {
+        if (val != oldVal) {
+          this.setImg();
+        }
       }
     },
     created: function() {
@@ -95,11 +196,49 @@
         vm.start_vol_page = response.data.start_vol_page;
         vm.image_url_prefix = response.data.image_url_prefix;
         vm.segid = response.data.cur_focus;
-        vm.loadImage();
       });
       this.loadCorrectSegs();
     },
+    mounted: function(){
+      document.addEventListener('click', this.handleDocumentClick);
+    },
+    destroyed: function(){
+      document.removeEventListener('click', this.handleDocumentClick);
+    },
     methods: {
+      handleDocumentClick: function(e) {
+        if (this.$el.querySelector('div.cmd-block').contains(e.target)) {
+          return;
+        }
+        if (!this.$refs['popover'].$el.contains(e.target)) {
+          this.$refs['popover'].doClose();
+        }
+      },
+      openDoubtForm: function() {
+
+        if (!this.doubt.doubt_text) {
+           this.$message('请选择要存疑的文字');
+        } else {
+          this.doubt.formVisible = true;
+        }
+      },
+      submitForm: function(formName) {
+        this.$refs[formName].validate((valid) => {
+          if (valid) {
+            this.createDoubtSeg()
+          } else {
+            console.log('error submit!!');
+            return false;
+          }
+        });
+      },
+      handleChange(val) {
+        if (this.activeNames.length == 0) {
+          this.$el.querySelector('div.diff-text-pane').style.height =this.$el.querySelector('div.diff-text-pane').clientHeight + 250;
+        } else {
+          this.$el.querySelector('div.diff-text-pane').style.height =this.$el.querySelector('div.diff-text-pane').clientHeight - 250;
+        }
+      },
       spanContent: function(content) {
         if (!content) {
           return '<span></span>'
@@ -113,43 +252,54 @@
         this.updateCorrectSeg(seg);
       },
       loadPopup: function (seg){
-        // 文本差异的correctseg进入可视区
-        window.pp = this;
-        if (seg.tag == "1") {
-          this.$refs['popover'].doClose();
-          return
+        //this.$el.querySelector('div.diff-text-pane').scrollTop + 
+        let diff_pane = this.$el.querySelector('div.diff-text-pane');
+        
+        let pos = this.$el.querySelector('#segdiff-' + seg.id).getBoundingClientRect().bottom;
+        if (diff_pane.scrollHeight - diff_pane.scrollTop == diff_pane.clientHeight) {
+          if (diff_pane.clientHeight - pos < 210) {
+            pos = this.$el.querySelector('#segdiff-' + seg.id).getBoundingClientRect().top - 210;
+          }
         }
-        let pos = this.$el.querySelector('div.diff-text-pane').scrollTop + this.$el.querySelector('#segdiff-' + seg.id).getBoundingClientRect().bottom;
-        this.$refs['popover'].$el.style.position = 'relative'
+        console.log(pos)
+        this.$refs['popover'].$el.style.position = 'absolute'
         this.$refs['popover'].$el.style.top = pos + 'px';
-        if (seg.id == this.current_seg.id) {
-          this.$refs['popover'].doToggle();
-        } else {
-          this.current_seg = seg;
-          this.$refs['popover'].doShow();
-        }
+        this.$refs['popover'].doShow();
       },
-      textSelection: function(seg = null){
+      hidePopup: function (){
+        this.$refs['popover'].doClose();
+      },
+      textSelection: function(seg = null, e = {}){
+        if (e.stopPropagation){
+          e.stopPropagation();
+        }
         var selection = window.getSelection(),
         range = selection.getRangeAt(0);
         // console.log(range.startOffset);
         // console.log(range.startContainer);
         // console.log(range.cloneContents().textContent);
+        
         if (seg) {
           this.page_no = seg.page_no;
           this.line_no = seg.line_no;
           this.char_no = seg.char_no;
+          this.current_seg = seg;
+
+          this.doubt.page_no = seg.page_no;
+          this.doubt.line_no = seg.line_no;
+          this.doubt.char_no = seg.char_no;
         }
-        // console.log(this.page_no,this.line_no, this.char_no);
-        if (range.startOffset <= 1){
-            this.current_char_no = this.char_no;
-        } else {
-            this.current_char_no = this.char_no + range.startOffset -1;
-        }
+
+        this.doubt.doubt_text = range.cloneContents().textContent;
+        this.doubt.doubt_char_no = range.startOffset + this.doubt.char_no;
+
+        this.current_char_no = this.char_no + range.startOffset ;
         
         this.loadImage();
-        if (seg) {
+        if (seg && seg.tag == 2) {
           this.loadPopup(seg);
+        } else {
+          this.$refs['popover'].doClose();
         }
         
         //range.moveStart('character', 1);
@@ -183,12 +333,11 @@
         if (!seg) { return }
         this.moveSegDiffToView(seg.id);
         this.textSelection(seg);
-        this.segClick(seg, evt);
       },
       getSegText: function(seg) {
         if (seg.selected_text == null) {
           if (!seg.text2) {
-            return '?'
+            return '<span class="ocr-missing"></span>'
           }else {
             return seg.text2
           }
@@ -215,19 +364,26 @@
           return this.getSegText(seg);
         }
       },
-      setImg: function(img_url, x, y, w, h) {
+      setImg: function() {
+        var img_url = this.img_url;
+        var x = this.x * this.scale;
+        var y = this.y * this.scale;
+        var w = this.w * this.scale;
+        var h = this.h * this.scale;
+        var scale = this.scale;
         var canvas = document.getElementById("page-canvas");
         var context = canvas.getContext("2d");
         var image = new Image();
         image.onload = function () {
           canvas.width = canvas.width;
-          canvas.height = image.height;
-          canvas.width = image.width;
+          canvas.height = image.height * scale;
+          canvas.width = image.width * scale;
 
           x = ~~x; y = ~~y; w = ~~w; h = ~~h;
 
           context.scale(0.8, 0.8);
-          context.drawImage(image, 0, 0);
+          context.drawImage(image, 0, 0, image.width, image.height,
+          0, 0, image.width * scale, image.height * scale);
 
           //设置样式
           context.lineWidth = 1;
@@ -250,20 +406,56 @@
       loadImage: function() {
         var vol_page = this.start_vol_page + this.page_no - 1;
         var url_prefix = 'https://s3.cn-north-1.amazonaws.com.cn/lqdzj-image' + this.image_url_prefix + vol_page.toString();
-        var img_url = url_prefix + '.jpg';
+        this.img_url = url_prefix + '.jpg';
         var cut_url = url_prefix + '.cut';
         var vm = this;
         axios.get(cut_url).then(function(response) {
           var char_data = response.data['char_data'];
-          for(var i = 0; i < char_data.length; ++i) {
-            var v = char_data[i];
-            var line_no = v['line_no'];
-            var char_no = v['char_no'];
-            if (line_no == vm.line_no && char_no == vm.current_char_no) {
-              vm.setImg(img_url, v['x'], v['y'], v['w'], v['h']);
-            }
+          v = _.find(char_data, function(v) { return v['line_no']  == vm.line_no && v['char_no'] == vm.current_char_no })
+          // 结尾缺字
+          if (!v) {
+            v = _.findLast(char_data, function(v) { return v['line_no']  == vm.line_no })
+            let max_char_no = _.maxBy(char_data, function(v) { return v['char_no']  })
+            vm.x = v['x'];
+            vm.y = v['y']+ v['h'];
+            vm.w = v['w'];
+            vm.h = (max_char_no['char_no'] - vm.current_char_no +1)*v['h'];
+            vm.setImg();
+            return;
           }
+          // 漏框，换算
+          if (!vm.current_seg.text2) {
+            let pre_v = _.findLast(char_data, function(v) { return v['line_no']  == vm.line_no && v['char_no'] < vm.current_char_no })
+            // 当前位置缺框
+            if (pre_v){
+              vm.x = v['x'];
+              vm.y = pre_v['y'] + pre_v['h'];
+              vm.w = v['w'];
+              vm.h = (v['y'] - pre_v['y'] - pre_v['h']);
+              vm.setImg();
+            } else {
+            // 首个字符缺框
+              let last_v = _.findLast(char_data, function(v) { return v['line_no']  == vm.line_no })
+              let max_char_no = _.maxBy(char_data, function(v) { return v['char_no']  })
+              let offset = (max_char_no['char_no'] - last_v['char_no']) *v['h']
+              let start_y = (v['y'] - offset < 0 ) ? 0 : v['y'] - offset;
+              vm.x = v['x'];
+              vm.y = start_y;
+              vm.w = v['w'];
+              vm.h = v['y'] - start_y;
+              vm.setImg();
+            }
+            return
+          }
+
+          vm.x = v['x'];
+          vm.y = v['y'];
+          vm.w = v['w'];
+          vm.h = v['h'];
+          vm.setImg();
         });
+
+        
       },
       selectText: function(seg, index, no, evt) {
         evt.preventDefault();
@@ -444,7 +636,16 @@
         .then(function(response) {
           console.log(response);
           seg.selected_text = response.data.selected_text
-        });
+          // 解决当前行为空，焦点丢失的问题，跳回上一个有内容可focus的块
+          if (!seg.selected_text) {
+            let ok_segs = _.filter(this.sharedata.correctsegs, function(o) { return o.selected_text});
+            new_seg = _.findLast(ok_segs, function(o) { return o.id < seg.id; });
+              this.$nextTick(function() {
+              this.textSelection(new_seg)
+              this.$el.querySelector('#segdiff-'+ new_seg.id + ' span').focus()
+            }.bind(this))
+          }
+        }.bind(this));
       },
       finishTask: function() {
         var vm = this;
@@ -456,6 +657,68 @@
         .catch(function (error) {
           vm.error = '提交出错！';
         });
+      },
+      createDoubtSeg: function() {
+        this.doubt.formVisible = false;
+        axios.post('/api/doubt_seg/'+ this.sharedata.task_id+'/' , {
+          task: this.sharedata.task_id,
+          page_no: this.doubt.page_no,
+          line_no: this.doubt.line_no,
+          char_no: this.doubt.char_no,
+          doubt_text: this.doubt.doubt_text,
+          doubt_char_no: this.doubt.doubt_char_no,
+          doubt_comment: this.doubt.doubt_comment,
+        }).then(function(response) {
+          console.log(response)
+          this.doubts.unshift(response.data)
+        }.bind(this))
+        .catch(function (error) {
+          console.log(error)
+          this.doubt.formVisible = true;
+        });
+      },
+      gotoDoubtSeg: function(seg, doubt) {
+        
+        if (seg) {
+          this.page_no = seg.page_no;
+          this.line_no = seg.line_no;
+          this.char_no = seg.char_no;
+          this.current_seg = seg;
+        }
+
+        this.current_char_no = doubt.doubt_char_no ;
+        let segid = seg.id
+        let node = this.$el.querySelector('#segdiff-'+ segid + ' span')
+        node.focus()
+        var offset = this.$el.querySelector('div.diff-text-pane').scrollTop + this.$el.querySelector('#segdiff-' + segid).getBoundingClientRect().top - 360;
+        this.$el.querySelector('div.diff-text-pane').scrollTop = offset;
+
+
+        this.$nextTick(function() {
+
+          let selection = this.userSelection();
+          let textNode = _.find(node.childNodes, function(o) { return o.data && o.data.indexOf(doubt.doubt_text) >= 0; } )
+          var range = document.createRange();
+          // 处理最后一个回车，没有分段Range
+        
+          if (textNode) {
+            range.selectNode(textNode)
+            let start_pos = doubt.doubt_char_no- doubt.char_no;
+            if (textNode.data.slice(start_pos , start_pos + doubt.doubt_text.length) != doubt.doubt_text) {
+              start_pos = textNode.data.indexOf(doubt.doubt_text)
+            }
+            range.setStart(textNode, start_pos);
+            range.setEnd(textNode, start_pos + doubt.doubt_text.length);
+          } else {
+            textNode = node.childNodes[0]
+            range.selectNode(textNode)
+            range.setStart(textNode, 0);
+            range.setEnd(textNode, 0);
+          }
+          selection.removeAllRanges();
+          selection.addRange(range);
+        });
+        this.loadImage();
       }
     }
   });

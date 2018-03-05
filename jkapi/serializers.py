@@ -15,8 +15,8 @@ class DiffSegTextSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DiffSegText
-        fields = ('tripitaka', 'text', 'start_char_pos', 'end_char_pos', 'rect', 'column_url', 'page_url')
-        read_only_fields = ('tripitaka', 'text', 'start_char_pos', 'end_char_pos', 'rect', 'column_url', 'page_url')
+        fields = ('id', 'tripitaka', 'text', 'start_char_pos', 'end_char_pos', 'rect', 'column_url', 'page_url')
+        read_only_fields = ('id', 'tripitaka', 'text', 'start_char_pos', 'end_char_pos', 'rect', 'column_url', 'page_url')
 
 class DiffSegSerializer(serializers.ModelSerializer):
     diffsegtexts = DiffSegTextSerializer(many=True)
@@ -107,5 +107,4 @@ class CorrectSegSerializer(serializers.ModelSerializer):
 class DoubtSegSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoubtSeg
-        fields = '__ALL__'
-
+        fields = ('id', 'task', 'doubt_comment', 'doubt_char_no', 'doubt_text', 'page_no', 'line_no', 'char_no', 'created_at')
