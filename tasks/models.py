@@ -233,6 +233,7 @@ class DoubtSeg(models.Model):
     doubt_char_no = models.SmallIntegerField('存疑行中字序号', default=-1)
     doubt_comment = models.TextField('存疑意见', default='', blank=True)
     created_at = models.DateTimeField('创建时间', default=timezone.now)
+    processed = models.BooleanField('是否处理', default=False)
 
 class ReelCorrectText(models.Model):
     BODY_START_PATTERN = re.compile('品(第[一二三四五六七八九十百]*(之[一二三四五六七八九十百]*)*)|(品之[一二三四五六七八九十百]*)$')
