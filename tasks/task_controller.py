@@ -504,7 +504,7 @@ def correct_verify_submit(task):
     if doubtseg: # 有存疑，生成文字校对难字任务
         diffcult_task = Task(batchtask=task.batchtask,
         reel=task.reel, typ=Task.TYPE_CORRECT_DIFFCULT, status=Task.STATUS_NOT_READY,
-        publisher=batchtask.publisher)
+        publisher=task.batchtask.publisher)
         diffcult_task.save()
         # 将task的CorrectSeg复制到新的diffcult_task
         correctsegs = CorrectSeg.objects.filter(task=task).all()
@@ -537,11 +537,11 @@ def correct_update(task):
             reel_correct_text.set_text(task.result)
             reel_correct_text.save()
 
-def judge_submit_result(task):
+def judge_submit(task):
     '''
     校勘判取提交结果
     '''
-    print('judge_submit_result')
+    print('judge_submit')
     lqreel = task.lqreel
     judge_tasks = list(Task.objects.filter(batchtask_id=task.batchtask_id, lqreel_id=lqreel.id, typ=Task.TYPE_JUDGE).all())
     task_count = len(judge_tasks)
@@ -602,6 +602,41 @@ def judge_submit_result(task):
     # 设定校勘判取审定任务状态
     Task.objects.filter(id=judge_verify_task.id).update(status=Task.STATUS_READY)
 
+def judge_verify_submit(task):
+    '''
+    校勘判取审定任务提交结果
+    '''
+    print('judge_verify_submit')
+    doubt_diffsegresult = DiffSegResult.objects.filter(task=task, doubt=True).first()
+    if doubt_diffsegresult: # 有存疑，则生成校勘判取难字任务
+        diffcult_task = Task(batchtask=task.batchtask,
+        lqreel=task.lqreel, typ=Task.TYPE_JUDGE_DIFFCULT, status=Task.STATUS_NOT_READY,
+        base_reel=task.base_reel, reeldiff=task.reeldiff, priority=task.priority,
+        publisher=task.batchtask.publisher)
+        diffcult_task.save()
+        # 将task的DiffSegResult复制到新的diffcult_task
+        diffsegresults = DiffSegResult.objects.filter(task=task).all()
+        for diffsegresult in diffsegresults:
+            if diffsegresult.doubt:
+                diffsegresult.selected = False
+            diffsegresult.task = diffcult_task
+            diffsegresult.id = None
+        DiffSegResult.objects.bulk_create(diffsegresults)
+        # 改为可领取状态
+        diffcult_task.status = Task.STATUS_READY
+        diffcult_task.save(update_fields=['status'])
+    else: # 没有存疑，直接发布校勘判取结果
+        publish_judge_result(task)
+
+def judge_diffcult_submit(task):
+    '''
+    校勘判取难字任务提交结果
+    '''
+    print('judge_diffcult_submit')
+    not_selected_diffsegresult = DiffSegResult.objects.filter(task=task, selected=False).first()
+    if not_selected_diffsegresult is None:
+        publish_judge_result(task)
+
 def publish_judge_result(task):
     '''
     发布校勘判取结果
@@ -619,7 +654,7 @@ def publish_judge_result(task):
     text_lst = []
     base_index = 0
     base_text_length = len(base_text)
-    diffsegresults = list(DiffSegResult.objects.filter(task_id=task.id).order_by('id'))
+    diffsegresults = list(DiffSegResult.objects.filter(task_id=task.id).order_by('diffseg__base_pos'))
     for diffsegresult in diffsegresults:
         if not diffsegresult.selected:
             print('not selected')
@@ -721,14 +756,19 @@ def correct_update_async(task_id):
     correct_update(task)
 
 @background(schedule=0)
-def judge_submit_result_async(task_id):
+def judge_submit_async(task_id):
     task = Task.objects.get(pk=task_id)
-    judge_submit_result(task)
+    judge_submit(task)
 
 @background(schedule=0)
-def publish_judge_result_async(task_id):
+def judge_verify_submit_async(task_id):
     task = Task.objects.get(pk=task_id)
-    publish_judge_result(task)
+    judge_verify_submit(task)
+
+@background(schedule=0)
+def judge_diffcult_submit_async(task_id):
+    task = Task.objects.get(pk=task_id)
+    judge_diffcult_submit(task)
 
 @background(schedule=0)
 def punct_submit_result_async(task_id):
