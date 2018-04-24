@@ -99,7 +99,6 @@ class JudgeTaskDetail(APIView):
         response = {
             'task_id': task_id,
             'status': self.task.status,
-            'is_verify': (self.task.typ == Task.TYPE_JUDGE_VERIFY),
             'base_text': base_text,
             'diffseg_pos_lst': json.loads(diffseg_pos_lst),
             'punct_lst': punctuation,
