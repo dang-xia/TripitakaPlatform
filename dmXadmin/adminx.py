@@ -1,7 +1,8 @@
 import xadmin
 from xadmin import views
-from xadmin.views import BaseAdminPlugin
-from xadmin.views import ListAdminView
+from xadmin.sites import site
+from xadmin.views import BaseAdminPlugin, ListAdminView
+from django.http import HttpResponse, HttpResponseRedirect
 from xadmin.plugins.actions import BaseActionView
 from xadmin.views.base import filter_hook
 from django.template.response import TemplateResponse
@@ -11,10 +12,9 @@ from tasks.models import Task, CorrectFeedback, JudgeFeedback
 from rect.models import *
 from jwt_auth.models import Staff
 from tasks.task_controller import correct_update_async
+from django.template import loader
 
 # 龙泉经目 LQSutra
-
-
 class LQSutraAdmin(object):
     list_display = ['sid', 'variant_code', 'name', 'author',
                     'total_reels', 'remark', 'showSutra']  # 自定义显示这两个字段
@@ -241,21 +241,22 @@ class UpdateTaskResultAction(BaseActionView):
             }, 'success')
 
 
-class GenerateTaskAction(BaseActionView):
+class GeneTaskPlugin(BaseAdminPlugin):
+    gene_task = False
 
-    action_name = "generate_task"
-    description = '发布任务'
-    icon = 'fa fa-refresh'
+    # Block Views
+    def block_top_toolbar(self, context, nodes):
+        if self.gene_task:
+            context.update({
+                "title": '生成任务',
+            })
+            nodes.append(loader.render_to_string('tasks/gene_button.html',
+                                                 {
+                                                     "title": '生成任务',
 
-    @filter_hook
-    def do_action(self, queryset):
-        context = self.get_context()
-        context.update({
-            "title": '生成任务',
-        })
-        #return TemplateResponse(self.request, 'xadmin/views/form.html', context)
-        return TemplateResponse(self.request, 'tasks/gene_task.html', context)
+                                                 }))
 
+site.register_plugin(GeneTaskPlugin, ListAdminView)
 
 @xadmin.sites.register(Task)
 class TaskAdmin(object):
@@ -280,9 +281,11 @@ class TaskAdmin(object):
                      'reel__sutra__name', 'reel__reel_no', 'lqreel__lqsutra__name']
     fields = ['status', 'result', 'picked_at', 'picker', 'priority']
     remove_permissions = ['add']
+    gene_task = True
     actions = [PauseSelectedTasksAction, ContinueSelectedTasksAction, ReclaimSelectedTasksAction,
                SetHighPriorityAction, SetMiddlePriorityAction, SetLowPriorityAction,
-               UpdateTaskResultAction, GenerateTaskAction]
+               UpdateTaskResultAction]
+
 
 @xadmin.sites.register(JudgeFeedback)
 class JudgeFeedbackAdmin:
