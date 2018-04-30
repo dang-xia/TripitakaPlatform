@@ -420,6 +420,7 @@ def publish_correct_result(task):
 CORRECT_RESULT_FILTER = re.compile('[ 　ac-oq-zA-Z0-9.?\-",/，。、：]')
 MULTI_LINEFEED = re.compile('\n\n+')
 def generate_correct_result(task):
+    print('generate_correct_result')
     text_lst = []
     last_ch_linefeed = False
     last_not_empty_correctseg = None
@@ -499,6 +500,7 @@ def correct_submit(task):
             correct_verify_task.save(update_fields=['status'])
 
 def correct_verify_submit(task):
+    print('correct_verify_submit')
     doubtseg = DoubtSeg.objects.filter(task=task).first()
     if doubtseg: # 有存疑，生成文字校对难字任务
         difficult_task = Task(batchtask=task.batchtask,
@@ -521,6 +523,15 @@ def correct_verify_submit(task):
         difficult_task.status = Task.STATUS_READY
         difficult_task.save(update_fields=['status'])
     else: # 没有存疑
+        generate_correct_result(task)
+        publish_correct_result(task)
+
+def correct_difficult_submit(task):
+    print('correct_difficult_submit')
+    doubtseg = DoubtSeg.objects.filter(task=task).filter(processed=False)
+    if doubtseg:
+        return
+    else:
         generate_correct_result(task)
         publish_correct_result(task)
 
@@ -743,6 +754,11 @@ def correct_submit_async(task_id):
 def correct_verify_submit_async(task_id):
     task = Task.objects.get(pk=task_id)
     correct_verify_submit(task)
+
+@background(schedule=0)
+def correct_difficult_submit_async(task_id):
+    task = Task.objects.get(pk=task_id)
+    correct_difficult_submit(task)
 
 @background(schedule=0)
 def publish_correct_result_async(task_id):
