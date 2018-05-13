@@ -112,10 +112,10 @@ class Task(models.Model):
 
     batchtask = models.ForeignKey(BatchTask, on_delete=models.CASCADE, verbose_name='批次号')
     reel = models.ForeignKey(Reel, on_delete=models.CASCADE, related_name='tasks',
-    blank=True, null=True)
-    lqreel = models.ForeignKey(LQReel, on_delete=models.CASCADE, blank=True, null=True)
+    blank=True, null=True, editable=False)
+    lqreel = models.ForeignKey(LQReel, on_delete=models.CASCADE, blank=True, null=True, editable=False)
     typ = models.SmallIntegerField('任务类型', choices=TYPE_CHOICES, db_index=True)
-    base_reel = models.ForeignKey(Reel, on_delete=models.CASCADE, verbose_name='底本', blank=True, null=True)
+    base_reel = models.ForeignKey(Reel, on_delete=models.CASCADE, verbose_name='底本', blank=True, null=True, editable=False)
     task_no = models.SmallIntegerField('组合任务序号', choices=TASK_NO_CHOICES, default=0)
     status = models.SmallIntegerField('状态', choices=STATUS_CHOICES, default=1, db_index=True)
 
@@ -124,10 +124,10 @@ class Task(models.Model):
     cur_focus = models.IntegerField('当前工作的条目', default=0)
 
     # 校勘判取相关
-    reeldiff = models.ForeignKey('ReelDiff', on_delete=models.SET_NULL, blank=True, null=True)
+    reeldiff = models.ForeignKey('ReelDiff', on_delete=models.SET_NULL, blank=True, null=True, editable=False)
     # 标点相关
-    reeltext = models.ForeignKey('ReelCorrectText', related_name='punct_tasks', on_delete=models.SET_NULL, blank=True, null=True)
-    lqtext = models.ForeignKey('LQReelText', related_name='lqpunct_tasks', verbose_name='龙泉藏经卷经文', on_delete=models.SET_NULL, blank=True, null=True)
+    reeltext = models.ForeignKey('ReelCorrectText', related_name='punct_tasks', on_delete=models.SET_NULL, blank=True, null=True, editable=False)
+    lqtext = models.ForeignKey('LQReelText', related_name='lqpunct_tasks', verbose_name='龙泉藏经卷经文', on_delete=models.SET_NULL, blank=True, null=True, editable=False)
 
     result = SutraTextField('结果', blank=True)
     started_at = models.DateTimeField('开始时间', blank=True, null=True)
@@ -212,7 +212,7 @@ class CorrectSeg(models.Model):
     TAG_P = 3
     TAG_LINEFEED = 4
 
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, editable=False)
     tag = models.SmallIntegerField('差异Tag', default=1)
     position = models.IntegerField('在校正本中的位置', default=0)
     text1 = models.TextField('文本1', blank=True, null=True)
@@ -227,7 +227,7 @@ class CorrectSeg(models.Model):
     doubt_comment = models.TextField('存疑意见', default='', blank=True)
 
 class DoubtSeg(models.Model):
-    task = models.ForeignKey(Task, related_name='doubt_segs', on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, related_name='doubt_segs', on_delete=models.CASCADE, editable=False)
     page_no = models.SmallIntegerField('Seg卷中页序号', default=-1)
     line_no = models.SmallIntegerField('Seg页中行序号', default=-1)
     char_no = models.SmallIntegerField('Seg行中字序号', default=-1)
@@ -242,12 +242,12 @@ class ReelCorrectText(models.Model):
     BODY_END_PATTERN = re.compile('卷第[一二三四五六七八九十百]*$')
     SEPARATORS_PATTERN = re.compile('[pb\n]')
 
-    reel = models.ForeignKey(Reel, related_name='reel_correct_texts' ,verbose_name='实体藏经卷', on_delete=models.CASCADE)
+    reel = models.ForeignKey(Reel, related_name='reel_correct_texts' ,verbose_name='实体藏经卷', on_delete=models.CASCADE, editable=False)
     text = SutraTextField('经文', blank=True) # 文字校对或文字校对审定后得到的经文
     head = SutraTextField('经文正文前文本', blank=True, default='')
     body = SutraTextField('经文正文', blank=True, default='')
     tail = SutraTextField('经文正文后文本', blank=True, default='')
-    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, default=None)
+    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, default=None, editable=False)
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, blank=True, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', default=timezone.now)
 
@@ -283,12 +283,12 @@ class ReelCorrectText(models.Model):
         self.tail = '\n'.join(lines[tail_line_index:])
 
 class LQReelText(models.Model):
-    lqreel = models.ForeignKey(LQReel, verbose_name='龙泉藏经卷', on_delete=models.CASCADE)
+    lqreel = models.ForeignKey(LQReel, verbose_name='龙泉藏经卷', on_delete=models.CASCADE, editable=False)
     text = SutraTextField('经文', blank=True) # 校勘判取审定后得到的经文
     head = SutraTextField('经文正文前文本', blank=True, default='')
     body = SutraTextField('经文正文', blank=True, default='')
     tail = SutraTextField('经文正文后文本', blank=True, default='')
-    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, default=None)
+    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, default=None, editable=False)
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', default=timezone.now)
 
@@ -307,9 +307,9 @@ class LQReelText(models.Model):
 
 # 校勘判取相关
 class ReelDiff(models.Model):
-    lqsutra = models.ForeignKey(LQSutra, on_delete=models.CASCADE, blank=True, null=True)
+    lqsutra = models.ForeignKey(LQSutra, on_delete=models.CASCADE, blank=True, null=True, editable=False)
     reel_no = models.SmallIntegerField('卷序号')
-    base_text = models.ForeignKey(ReelCorrectText, related_name='reeldiffs', verbose_name='基准文本', on_delete=models.CASCADE)
+    base_text = models.ForeignKey(ReelCorrectText, related_name='reeldiffs', verbose_name='基准文本', on_delete=models.CASCADE, editable=False)
     published_at = models.DateTimeField('发布时间', blank=True, null=True)
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True,
     verbose_name='发布用户')
@@ -319,7 +319,7 @@ class DiffSeg(models.Model):
     """
     各版本比对结果的差异文本段
     """
-    reeldiff = models.ForeignKey(ReelDiff, on_delete=models.CASCADE, null=True)
+    reeldiff = models.ForeignKey(ReelDiff, on_delete=models.CASCADE, null=True, editable=False)
     base_pos = models.IntegerField('在基准文本中位置', default=0) # base_pos=0表示在第1个字前，base_pos>0表示在第base_pos个字后
     base_length = models.IntegerField('基准文本中对应文本段长度', default=0)
     recheck = models.BooleanField('待复查', default=False)
@@ -329,7 +329,7 @@ class DiffSegText(models.Model):
     """
     各版本比对结果的差异文本段中各版本的文本
     """
-    diffseg = models.ForeignKey(DiffSeg, on_delete=models.CASCADE, related_name='diffsegtexts')
+    diffseg = models.ForeignKey(DiffSeg, on_delete=models.CASCADE, related_name='diffsegtexts', editable=False)
     tripitaka = models.ForeignKey(Tripitaka, on_delete=models.CASCADE)
     text = models.TextField('文本', blank=True, null=True)
     position = models.IntegerField('在卷文本中的位置（前有几个字）', default=0)
@@ -410,8 +410,8 @@ class DiffSegResult(models.Model):
         (TYPE_SELECT, '选择'),
         (TYPE_SPLIT, '拆分'),
     )
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)
-    diffseg = models.ForeignKey(DiffSeg, on_delete=models.CASCADE, related_name='diffsegresults')
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, editable=False)
+    diffseg = models.ForeignKey(DiffSeg, on_delete=models.CASCADE, related_name='diffsegresults', editable=False)
     typ = models.SmallIntegerField('结果类型', choices=TYPE_CHOICES, default=1, editable=True)
     selected_text = models.TextField('判取文本', blank=True, null=True, default='')
     merged_diffsegresults = models.ManyToManyField("self", blank=True)
@@ -443,11 +443,11 @@ class DiffSegResult(models.Model):
         return True
 
 class Punct(models.Model):
-    reel = models.ForeignKey(Reel, verbose_name='实体藏经卷', on_delete=models.CASCADE)
-    reeltext = models.ForeignKey(ReelCorrectText, verbose_name='实体藏经卷经文', on_delete=models.CASCADE)
+    reel = models.ForeignKey(Reel, verbose_name='实体藏经卷', on_delete=models.CASCADE, editable=False)
+    reeltext = models.ForeignKey(ReelCorrectText, verbose_name='实体藏经卷经文', on_delete=models.CASCADE, editable=False)
     punctuation = models.TextField('标点', blank=True, null=True) # [[5,'，'], [15,'。']]
     body_punctuation = models.TextField('文本标点', blank=True, null=True)
-    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True) # Task=null表示原始标点结果，不为null表示标点任务和标点审定任务的结果
+    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, editable=False) # Task=null表示原始标点结果，不为null表示标点任务和标点审定任务的结果
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', blank=True, null=True, auto_now_add=True)
 
@@ -459,11 +459,11 @@ class Punct(models.Model):
         return '%s' % self.reeltext
 
 class LQPunct(models.Model):
-    lqreel = models.ForeignKey(LQReel, verbose_name='龙泉藏经卷', on_delete=models.CASCADE)
-    reeltext = models.ForeignKey(LQReelText, verbose_name='龙泉藏经卷经文', on_delete=models.CASCADE)
+    lqreel = models.ForeignKey(LQReel, verbose_name='龙泉藏经卷', on_delete=models.CASCADE, editable=False)
+    reeltext = models.ForeignKey(LQReelText, verbose_name='龙泉藏经卷经文', on_delete=models.CASCADE, editable=False)
     punctuation = models.TextField('标点', blank=True, null=True) # [[5,'，'], [15,'。']]
     body_punctuation = models.TextField('文本标点', blank=True, null=True)
-    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True) # Task=null表示原始标点结果，不为null表示标点任务和标点审定任务的结果
+    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, editable=False) # Task=null表示原始标点结果，不为null表示标点任务和标点审定任务的结果
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', blank=True, null=True)
 
@@ -485,14 +485,14 @@ class MarkUnitBase(models.Model):
         abstract = True
 
 class Mark(models.Model):
-    reel = models.ForeignKey(Reel, on_delete=models.CASCADE)
-    reeltext = models.ForeignKey(ReelCorrectText, verbose_name='实体藏经卷经文', on_delete=models.CASCADE)
-    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True) # Task=null表示原始格式标注结果，不为null表示格式标注任务和格式标注审定任务的结果
+    reel = models.ForeignKey(Reel, on_delete=models.CASCADE, editable=False)
+    reeltext = models.ForeignKey(ReelCorrectText, verbose_name='实体藏经卷经文', on_delete=models.CASCADE, editable=False)
+    task = models.OneToOneField(Task, verbose_name='发布任务', on_delete=models.SET_NULL, blank=True, null=True, editable=False) # Task=null表示原始格式标注结果，不为null表示格式标注任务和格式标注审定任务的结果
     publisher = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, verbose_name='发布用户')
     created_at = models.DateTimeField('创建时间', blank=True, null=True)
 
 class MarkUnit(MarkUnitBase):
-    mark = models.ForeignKey(Mark, on_delete=models.CASCADE)
+    mark = models.ForeignKey(Mark, on_delete=models.CASCADE, editable=False)
 
 ####
 class FeedbackBase(models.Model):
@@ -525,7 +525,7 @@ class FeedbackBase(models.Model):
     fb_user_display.fget.short_description = '反馈用户'
 
 class CorrectFeedback(FeedbackBase):
-    correct_text = models.ForeignKey(ReelCorrectText, on_delete=models.CASCADE)
+    correct_text = models.ForeignKey(ReelCorrectText, on_delete=models.CASCADE, editable=False)
     position = models.IntegerField('在卷文本中的位置（前有几个字）', default=0)
 
     class Meta:
@@ -533,7 +533,7 @@ class CorrectFeedback(FeedbackBase):
         verbose_name_plural = '文字校对反馈'
 
 class JudgeFeedback(FeedbackBase):
-    diffsegresult = models.ForeignKey(DiffSegResult, on_delete=models.CASCADE, related_name='feedbacks')
+    diffsegresult = models.ForeignKey(DiffSegResult, on_delete=models.CASCADE, related_name='feedbacks', editable=False)
 
     @property
     def lqsutra_name(self):
@@ -564,7 +564,7 @@ class LQPunctFeedback(models.Model):
         (STATUS_FINISHED, '已完成'),
     )
 
-    lqpunct = models.ForeignKey(LQPunct, verbose_name='定本标点', on_delete=models.CASCADE)
+    lqpunct = models.ForeignKey(LQPunct, verbose_name='定本标点', on_delete=models.CASCADE, editable=False)
     start = models.IntegerField('起始字index', default=0)
     end = models.IntegerField('结束字下一个index', default=0)
     fb_punctuation = models.TextField('反馈标点', blank=True, null=True) # 包含整卷文本段的标点，格式：[[5,'，'], [15,'。']]
