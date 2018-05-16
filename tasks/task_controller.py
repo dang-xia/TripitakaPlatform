@@ -18,6 +18,7 @@ create_new_data_for_judge_tasks
 import json, re, logging, traceback
 from operator import attrgetter, itemgetter
 from background_task import background
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +28,10 @@ def create_correct_tasks(batchtask, reel, base_reel_lst, sutra_to_body, correct_
     if reel.sutra.sid.startswith('CB') or reel.sutra.sid.startswith('GL'): # 不对CBETA, GL生成任务
         return
     # Correct Task
-    print('create_correct_tasks: ', reel)
+    print('create_correct_tasks: ', reel.sutra.sid, reel.reel_no)
     reel_ocr_texts = list(ReelOCRText.objects.filter(reel=reel))
     if len(reel_ocr_texts) == 0:
-        print('no ocr text for reel: ', reel)
+        print('no ocr text for reel: ', reel.sutra.sid, reel.reel_no)
         return None
     reel_ocr_text = reel_ocr_texts[0]
     ocr_text = OCRCompare.preprocess_ocr_text(reel_ocr_text.text)
@@ -237,7 +238,7 @@ mark_times = 0, mark_verify_times = 0):
             base_reel = base_reel_lst[0]
             create_judge_tasks(batchtask, lqreel, base_reel, judge_times, judge_verify_times)
         except:
-            print('create judge task failed: ', lqsutra, reel_no)
+            print('create judge task failed: ', lqsutra.sid, reel_no)
         if lqreel:
             create_lqpunct_tasks(batchtask, lqreel, lqpunct_times, lqpunct_verify_times)
 
@@ -278,7 +279,7 @@ mark_times = 0, mark_verify_times = 0):
         if sutra.tripitaka.cut_ready:
             pass
         else:
-            print("切分未准备好！")
+            print("tripitaka.cut_ready is False.")
         base_sutra_lst = []
         sutra_to_body = {}
         # 先得到两个base_reel，CBETA和高丽藏
@@ -410,12 +411,12 @@ def publish_correct_result(task):
     lqsutra = sutra.lqsutra
     batchtask = task.batchtask
     if not lqsutra:
-        print('没有关联的龙泉藏经')
-        logging.error('没有关联的龙泉藏经')
+        print('no lqsutra')
+        logging.error('no lqsutra')
         return None
     judge_tasks = list(Task.objects.filter(batchtask=batchtask, lqreel__lqsutra=lqsutra, typ=Task.TYPE_JUDGE))
     if len(judge_tasks) == 0:
-        print('没有校勘判取任务')
+        print('no judge task')
         return
     base_sutra = judge_tasks[0].base_reel.sutra
     judge_task_not_ready = (judge_tasks[0].status == Task.STATUS_NOT_READY)
@@ -581,14 +582,14 @@ def regenerate_correctseg(reel):
     '''
     由于卷中某些页有增加或更新等原因，需要重新生成此卷的文字校对任务的CorrectSeg数据
     '''
-    print('regenerate_correctseg: %s' % reel)
+    print('regenerate_correctseg: ', reel.sutra.sid, reel.reel_no)
     if reel.sutra.sid.startswith('CB') or reel.sutra.sid.startswith('GL'): # 不对CBETA, GL生成任务
         return
     # 更新ReelOCRText
     try:
         reel_ocr_text = ReelOCRText.objects.get(reel_id = reel.id)
     except:
-        print('no ocr text for reel: ', reel)
+        print('no ocr text for reel: ', reel.sutra.sid, reel.reel_no)
         return
     text = get_reel_text(reel) #, force_download=True) # test
     if not text:
@@ -665,7 +666,7 @@ def regenerate_correctseg(reel):
         CorrectSeg.objects.bulk_create(correctsegs)
     Task.objects.filter(reel=reel, typ=Task.TYPE_CORRECT, picker=None).update(status=Task.STATUS_READY)
     Task.objects.filter(reel=reel, typ=Task.TYPE_CORRECT).exclude(picker=None).update(status=Task.STATUS_PROCESSING)
-    print('regenerate_correctseg done: %s' % reel)
+    print('regenerate_correctseg done:', reel.sutra.sid, reel.reel_no)
 
 def judge_submit(task):
     '''
@@ -950,3 +951,13 @@ def regenerate_correctseg_async(reel_id_lst_json):
             regenerate_correctseg(reel)
         except:
             pass
+
+@background(schedule=timedelta(days=7))
+def revoke_overdue_task_async(task_id):
+    task = Task.objects.get(pk=task_id)
+    if task.status == Task.STATUS_PROCESSING:
+        print('task %s is overdue, to be revoked.' % task_id)
+        task.picker = None
+        task.picked_at = None
+        task.status = Task.STATUS_READY
+        task.save(update_fields=['picker', 'picked_at', 'status'])
