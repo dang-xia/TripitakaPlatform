@@ -65,7 +65,7 @@ class DiffSegResultSimpleSerializer(serializers.ModelSerializer):
         for diffsegtext in self.instance.diffseg.diffsegtexts.all():
             tripitaka_id_to_oldtext[diffsegtext.tripitaka_id] = diffsegtext.text
         try:
-            split_info = loads(data['split_info'])
+            split_info = json.loads(data['split_info'])
         except:
             raise serializers.ValidationError('not json string')
         try:
@@ -143,3 +143,13 @@ class LQPunctFeedbackSerializer(serializers.ModelSerializer):
             'end': {'required': 'True'},
             'fb_punctuation': {'required': 'True'},
         }
+
+class MarkUnitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarkUnit
+        fields = '__all__'
+
+class CorrectFeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CorrectFeedback
+        fields = ('id', 'correct_text', 'position', 'original_text', 'fb_text', 'fb_comment', 'created_at', 'processor', 'processed_at', 'response', 'fb_user')
