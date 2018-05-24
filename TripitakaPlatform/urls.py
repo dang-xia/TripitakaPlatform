@@ -25,7 +25,7 @@ from tasks.views import lqtripitaka
 from tasks.views import tripitaka
 from tools.views import *
 import xadmin
-
+ 
 urlpatterns = [
     path('accounts/', include('django.contrib.auth.urls')),
     path('backend/', admin.site.urls),
@@ -56,14 +56,11 @@ urlpatterns = [
 
     path('tools/cutfixed_pages/', cutfixed_pages, name='cutfixed_pages'),
     path('tools/cutfixed_pages/<pid>/', cutfixed_page_detail, name='cutfixed_page_detail'),
-
-    path('correctfeedback/<int:correctfeedback_id>/', tripitaka.process_correctfeedback, name='process_correctfeedback'),
-    path('my_correctfeedback/', tripitaka.view_correctfeedback, name='my_correctfeedback'),
 ]
 
 # # 通用URL映射，必须放在最后
 urlpatterns += [
     # 通用页面URL映射，必须放在最后
     url(r'^api/v1', include('api.common_urls',
-                            namespace='common_api')),
+                             namespace='common_api')),
 ]
