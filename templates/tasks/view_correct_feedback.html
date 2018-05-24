@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="my-correct-feedback">
+  <div class="container">
+    <div class="row">
+      <div class="correct-base-text" id="correct_feedback">
+        <span v-for="cf in correctfeedback">
+            <span is="correct-fb-sutra-unit" :data="e" :sharedata="sharedata"></span>
+        </span>
+      </div>
+      <div class="row">
+        <div class="col-md-6">
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <correct-fb-show :textdiffsegtexts="text_to_diffsegtexts" :correctfeedback="correctfeedback"></correct-fb-show>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block foot_script %}
+<script src="{{ static('custom/js/tripitaka.js') }}"></script>
+<script>
+  var app = new Vue({
+    el: '#my-correct-feedback',
+    data: {
+      correctfeedback: null,
+      sharedata: {
+      }
+    },
+    created: function() {
+      this.loadCorrectFeedback();
+    },
+    watch: {
+    },
+    methods: {
+      loadCorrectFeedback: function() {
+        var url = '/api/correctfeedback/';
+        var vm = this;
+        axios.get(url).then(function(response) {
+          vm.correctfeedback = response.data;
+        });
+      },
+      processCorrectFeedback: function(feedback_id) {
+
+      },
+      getSubmitTitle: function() {
+        if (this.correctfeedback.response != 1) {
+          this.submit_title = '已处理';
+        } else {
+          this.submit_title = '';
+        }
+      },
+      submitResponse: function(result) {
+        var url = '/api/correctfeedback/' + this.correctfeedback_id + '/';
+        var vm = this;
+        axios.put(url, {
+          'response': result
+        }).then(function(response) {
+          vm.correctfeedback = response.data;
+          vm.getSubmitTitle();
+          alert('提交成功！')
+        });
+      }
+    }
+  });
+</script>
+{% endblock %}

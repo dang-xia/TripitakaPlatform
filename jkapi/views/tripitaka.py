@@ -81,9 +81,6 @@ class SutraText(APIView):
         #     punctuation='no data'
 
         #page
-         
-       
-
         response = {
             'sutra': text,
             'pageurls':strURLRet,
@@ -133,3 +130,10 @@ class CorrectFeedbackViewset(generics.ListAPIView):
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response({'errors': "未校对，不能反馈！"}, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request):
+        # fb_user = request.user
+        # correct_feedbacks = CorrectFeedback.objects.filter(fb_user=fb_user)
+        correct_feedbacks = CorrectFeedback.objects.all()
+        serializer = CorrectFeedbackSerializer(correct_feedbacks, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
